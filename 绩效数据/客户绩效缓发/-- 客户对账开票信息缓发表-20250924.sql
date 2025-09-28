@@ -461,7 +461,9 @@ and  (diff_confirm_days>=20 or diff_invoice_days>=25) and (unbill_amt+ unbill_am
 
 
 
-
+-- 1、需要处理的字段(a.unbill_amt+a.unbill_amount_history)  有错误值，需要做特殊处理
+-- 2、剔除项目制、预付款客户
+-- 3、剔除对账单号对账金额与单据金额一致的单号
 -- 结果表
 -- desc  csx_dws.csx_dws_sss_order_credit_invoice_bill_settle_detail_di
 create table  csx_analyse_tmp.csx_analyse_tmp_bill_settle_04 as 

@@ -1,0 +1,85 @@
+@所有人  应收和SAP对应新旧表名称，新表为增加信控号维度
+csx_dws_sap_order_settle_detail_di  
+csx_dws_sap_order_credit_settle_detail_di
+
+csx_dws_sap_subject_customer_settle_detail
+csx_dws_sap_subject_customer_credit_settle_detail        
+
+csx_dws_sap_customer_settle_day_stat_di
+csx_dws_sap_customer_credit_settle_day_stat_di
+
+csx_dws_sap_customer_settle_detail_di
+csx_dws_sap_customer_credit_settle_detail_di
+
+
+
+csx_dws_sss_order_invoice_bill_settle_detail_di
+csx_dws_sss_order_credit_invoice_bill_settle_detail_di
+
+csx_dws_sss_customer_invoice_bill_settle_stat_di
+csx_dws_sss_customer_credit_invoice_bill_settle_stat_di
+
+
+csx_dws_sss_customer_invoice_bill_settle_day_stat_di 
+csx_dws_sss_customer_credit_invoice_bill_settle_day_stat_di 
+csx_dwd.csx_dwd_sss_source_bill_di
+
+客户对账金额逻辑调整
+csx_dwd_sss_source_bill_di  -- SSS单据明细查询
+csx_dws_sss_order_credit_invoice_bill_settle_detail_di 
+对账和开票逻辑做到底层表,后置依赖无需调整, 对账状态给20, 开票金额给单据金额, 默认已开票已对账
+
+以上表新增字段 bbc_bill_flag  BBC是否需要对账标识 0=需要，1=无需, 今天完成上线
+对于无需对账数据, 对账状态不会改变, 现在要把这部分数据全部给已对账
+
+依赖csx_dws_sss_order_credit_invoice_bill_settle_detail_di 及其后续任务无需调整
+
+
+settle_settle_bill_detail_management_classification_item  -- 业务库
+
+csx_dwd.csx_dwd_pss_settle_settle_bill_detail_management_classification_item_di
+settle_settle_bill    -- 业务库
+csx_dwd_pss_settle_settle_bill_di
+settle_agreement    -- 业务库
+csx_ods_csx_b2b_settle_settle_agreement_df
+statement_source_bill  -- 业务库
+ csx_dwd_pss_statement_source_bill_di
+
+依赖单据底层表: csx_dwd_sss_source_bill_di
+
+对账逻辑:
+  已对账逻辑
+  原来: check_bill_status in (15,20)
+  现在: check_bill_status in (15,20) or bbc_bill_flag = 1
+
+  未对账逻辑
+  原来: check_bill_status not in (15,20)
+  现在: check_bill_status not in (15,20) and bbc_bill_flag = 0
+
+开票逻辑:
+  已开票逻辑
+  原来: 取得 invoice_amount 字段 
+  现在: bbc_bill_flag = 1 给单据金额作为开票金额
+
+  未开票逻辑: 按具体逻辑调整
+-- 客户对账单明细表
+sss_statement_account   
+csx_dwd.csx_dwd_sss_customer_statement_account_di  线上已存在
+-- 销售结算账单开票表
+sss_statement_invoice     
+csx_ods.csx_ods_csx_b2b_sss_sss_statement_invoice_df  今天上线
+--20250102 新日配模式分类
+case when channel_code in ('1','7','9') and business_type_code = '1'  
+  and  business_type_code = 1 and direct_delivery_type in('1','2','13','14','15','19) 
+  then '日配-销售管理'
+  when channel_code in ('1','7','9') and business_type_code = '1'  
+  and  direct_delivery_type in ('0','11','12','16','17','18')
+  then '日配-采购参与' 
+end 
+
+-- 直送类型
+-- direct_delivery_type int 
+直送类型: 0-其他、1-客户指定采买商品、2-客户自购、11-临时加单、12-紧急补货、13-计划直送、14-委外、15-前置仓、16-计划直送(采购指定)、17-配转直、18-委外(采购指定)
+
+
+

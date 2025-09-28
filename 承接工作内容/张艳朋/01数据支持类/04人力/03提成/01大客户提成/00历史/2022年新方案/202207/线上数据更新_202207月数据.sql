@@ -1,0 +1,38 @@
+SET hive.exec.dynamic.partition.mode=nonstrict;
+
+--昨天
+--set last_1day = regexp_replace(date_sub(current_date,1),'-','');
+set last_1day = '20220731';
+
+set create_time = from_unixtime(unix_timestamp(),'yyyy-MM-dd HH:mm:ss');
+set update_time = from_unixtime(unix_timestamp(),'yyyy-MM-dd HH:mm:ss');
+set create_by='zhangyanpeng';
+
+insert overwrite table csx_tmp.report_sss_r_m_crm_customer_commission_detail partition(sdt)  
+select 
+	concat_ws('&',customer_no,smonth) as biz_id,
+	region_code_customer,region_name_customer,province_code_customer,province_name_customer,city_group_code_customer,city_group_name_customer,	
+	region_code_sales,region_name_sales,province_code_sales,province_name_sales,city_group_code_sales,city_group_name_sales,
+	region_code_rp_service,region_name_rp_service,province_code_rp_service,province_name_rp_service,city_group_code_rp_service,city_group_name_rp_service,
+	region_code_fl_service,region_name_fl_service,province_code_fl_service,province_name_fl_service,city_group_code_fl_service,city_group_name_fl_service,
+	region_code_bbc_service,region_name_bbc_service,province_code_bbc_service,province_name_bbc_service,city_group_code_bbc_service,city_group_name_bbc_service,
+	smonth as yearmonth,customer_id,customer_no,customer_name,sales_id,work_no,sales_name,rp_service_user_id,rp_service_user_work_no,rp_service_user_name,
+	fl_service_user_id,fl_service_user_work_no,fl_service_user_name,bbc_service_user_id,bbc_service_user_work_no,bbc_service_user_name,
+	sales_value,rp_sales_value,fl_sales_value,bbc_sales_value,rp_bbc_sales_value,profit,rp_profit,fl_profit,bbc_profit,rp_bbc_profit,
+	prorate,rp_prorate,fl_prorate,bbc_prorate,rp_bbc_prorate,sales_prorate,sales_rp_prorate,sales_fl_prorate,sales_bbc_prorate,sales_rp_bbc_prorate,
+	salary_rp_sales_value,salary_rp_profit,salary_fl_sales_value,salary_fl_profit,salary_bbc_sales_value,salary_bbc_profit,salary_sales_value,salary_profit,
+	receivable_amount,overdue_amount,rp_sales_sale_fp_rate,rp_sales_profit_fp_rate,fl_sales_sale_fp_rate,fl_sales_profit_fp_rate,bbc_sales_sale_fp_rate,bbc_sales_profit_fp_rate,
+	rp_service_user_sale_fp_rate,rp_service_user_profit_fp_rate,fl_service_user_sale_fp_rate,fl_service_user_profit_fp_rate,bbc_service_user_sale_fp_rate,bbc_service_user_profit_fp_rate,	
+	sales_over_rate,rp_service_user_over_rate,fl_service_user_over_rate,bbc_service_user_over_rate,rp_service_receivable_amount,rp_service_overdue_amount,
+	fl_service_receivable_amount,fl_service_overdue_amount,bbc_service_receivable_amount,bbc_service_overdue_amount,
+	sales_sales_value_ytd,sales_rp_bbc_sales_value_ytd,sales_fl_sales_value_ytd,
+	tc_rp_sales_value_sales,tc_rp_profit_sales,tc_fl_sales_value_sales,tc_fl_profit_sales,tc_bbc_sales_value_sales,tc_bbc_profit_sales,tc_sales,
+	tc_rp_sales_value_service,tc_rp_profit_service,tc_rp_service,tc_fl_sales_value_service,tc_fl_profit_service,tc_fl_service,
+	tc_bbc_sales_value_service,tc_bbc_profit_service,tc_bbc_service,
+	${hiveconf:create_by} as create_by,
+	${hiveconf:create_time} as create_time,
+	${hiveconf:update_time} as updated_time,
+	substr(${hiveconf:last_1day},1,6) as sdt
+from  
+	csx_tmp.tc_new_cust_salary_info_202204
+;

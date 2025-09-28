@@ -1,0 +1,1158 @@
+-- 创建人员信息表，获取销售员和服务管家的城市，因为存在一个业务员名下客户跨城市的情况
+drop table csx_tmp.tc_person_info; --5
+create table csx_tmp.tc_person_info
+as
+select 
+	distinct a.id,a.user_number,a.name,b.city_group_code,b.city_group_name,b.province_code,b.province_name,b.region_code,b.region_name
+from
+	(
+	select
+		id,user_number,name,user_position,city_name,prov_name
+	from
+		csx_dw.dws_basic_w_a_user
+	where
+		sdt=regexp_replace(date_sub(current_date,1),'-','')
+		and del_flag = '0'
+	) a
+	left join -- 区域表
+		( 
+		select
+			city_code,city_name,area_province_code,area_province_name,city_group_code,city_group_name,province_code,province_name,region_code,region_name
+		from
+			csx_dw.dws_sale_w_a_area_belong
+		) b on b.city_name=a.city_name and b.area_province_name=a.prov_name
+;
+
+-- 月初 月末 年初
+set month_start_day ='20220201';	
+set month_end_day ='20220228';	
+set year_start_day ='20220101';		
+
+
+-- 签呈处理销售员服务管家关系
+drop table csx_tmp.tc_customer_service_manager_info_new;
+create table csx_tmp.tc_customer_service_manager_info_new
+as  
+select 
+	distinct customer_no,service_user_work_no,service_user_name,work_no,sales_name,is_part_time_service_manager,
+    sales_sale_rate as salesperson_sales_value_fp_rate, --销售员_销售额_分配比例
+	sales_profit_rate as salesperson_profit_fp_rate,  --销售员_定价毛利额分配比例
+    if(work_no=service_user_work_no and is_part_time_service_manager='是',0,service_user_sale_rate) as service_user_sales_value_fp_rate,  --服务管家_销售额_分配比例
+	if(work_no=service_user_work_no and is_part_time_service_manager='是',0,service_user_profit_rate) as service_user_profit_fp_rate --服务管家_定价毛利额_分配比例
+from 
+	csx_dw.report_crm_w_a_customer_service_manager_info_new
+where 
+	sdt=${hiveconf:month_end_day}
+	and customer_no not in ('X000000','105502','100326','PF1265','105182','106721','102565','103855','105150','111844','102734','107404','102784','102901','112288','113467',
+	'103199','104469','104501','115982','115987','PF0365','105355','105886','100563','101482','102229','102508','102633','102686','103062','103141','103372','103714','104007',
+	'104054','104165','104612','104954','104970','105156','105177','105181','105225','105441','105721','105806','105838','105882','106423','106481','106881','107371','108127',
+	'108739','109377','111241','112062','112327','113101','113635','113646','114344','115324','115646','115679','115857','116211','118687','PF0094','PF1205','104281','115656',
+	'105593','107398','109447','111207','115537','115602','115826','117244','123065','125534','116015','115721','119703','118887','116556','116733','116702','116923','116863',
+	'116883','116877','116826','123534','116967','117026','117025','117009','117045','117040','117035','116944','117030','117027','116903','116994','117019','116993','116989',
+	'123716','120100','119806','119803','119815','120463','122125','122106','121763','122375','122286','122371','123060','123383','123644','123813','124179','125244','125508',
+	'103183','104086','104397','100984','105499','114843','108589','102580','102890','PF0099','116099','106301','106306','120246','120689','117047','118836','115899','116398',
+	'122143','117108','123827','117121','117222','123442','120735','118183','125137','123923','120836','123034','123859','123650','124555','124641','104318','104085','120781',
+	'118744','106433','115051','108283','119897','109722','114516','120365','119210','119168','119519','122555','121507','122269','123222','123262','123257','123242','123247',
+	'123253','124602','115205','115643','120459','121206','102755','103175','103868','103874','103887','103898','103908','103926','103927','104460','109000','106563','114522',
+	'115431','118504','120554','113281','115935','118602','118748','119990','125677','110872','118825','105164','105165','119757','111628','111612','114289','117396','108162',
+	'115829','108180','108152','116445','120458','123032','124481','125355','111331','110863','114667','108267','111298','115476','118914','111318','111336','112629','123623',
+	'103096','102534','102798','102806','103808','103945','104150','104414','105005','105024','105085','105186','105247','105287','105480','105483','105505','105521','105540',
+	'105569','105639','105715','105756','105768','105790','105791','105802','106095','106266','106300','106434','106459','106524','106538','106558','106572','106602','106737',
+	'106898','106900','106910','106925','107000','107031','107058','107073','107150','107242','107361','107435','107438','107453','107461','107500','107532','107593','107655',
+	'107674','107685','107749','107827','107873','107995','108176','108185','108236','108417','108480','108777','108795','108824','108960','109349','109786','110242','110664',
+	'110866','111074','111219','111422','111498','111556','111892','111896','111912','111926','111932','111942','111956','111960','111984','111987','112210','112731','112803',
+	'112813','112911','113063','113134','113347','113564','113571','113590','113643','113645','113763','113920','114287','114354','114469','114704','114800','114921','114927',
+	'115082','115178','115206','115236','115242','115253','115274','115471','115490','115527','115607','115645','115710','115742','115807','115858','115915','116101','116141',
+	'116433','116461','116539','116665','116670','116760','116943','116962','116988','116998','117016','117020','117022','117028','117052','117058','117093','117112','117115',
+	'117134','117135','117213','117230','117239','117245','117340','117348','117438','117454','117543','117643','117673','117721','117728','117729','117748','117749','117761',
+	'117766','117773','117776','117777','117781','117782','117783','117784','117785','117786','117791','117796','117797','117800','117805','117822','117860','117918','117920',
+	'117964','118050','118061','118169','118206','118212','118239','118470','118522','118592','118670','118717','118864','118879','118933','118943','118973','119076','119252',
+	'119432','119513','119517','119531','119534','119548','119558','119648','119659','119701','119756','119765','119930','119945','120041','120092','120105','120231','120287',
+	'120497','120513','120541','120543','120581','120600','120640','120792','120811','120860','120914','120924','120958','120959','120983','121042','121045','121099','121113',
+	'121172','121180','121181','121211','121310','121318','121340','121397','121415','121436','121627','121771','121870','122011','122052','122082','122087','122095','122129',
+	'122170','122176','122224','122238','122284','122334','122433','122487','122509','122532','122606','122672','122730','122749','122895','122916','122976','122983','123025',
+	'123031','123278','123340','123527','123528','123536','123615','123745','123824','123832','124029','124039','124467','124577','124606','124638','124650','124680','125058',
+	'125089','125146','125931','123035','111764','112285','112681','112914','113015','113394','114650','114804','117311','118762','120495','125370','125647','125899','113059',
+	'102866','123053','117884','105673','110807','116171','115252','115928','116714','116794','116835','117242','117223','117255','117929','119100','119833','120121','120360',
+	'121796','105908','107260','113096','115302','121088','123896','105761','118582','121128','123365','125663','105754','106247','107337','113501','116639','116932','117304',
+	'117605','120830','122837','104623','113695','123299','109435','111255','116527','123279','124046','105879','107553','107682','111301','111520','112181','113641','117119',
+	'104402','104885','107415','121452','115883','116915','122655','118458','119992','121300','122152','125638','125731','125880','113591','113724','113749','117422','118824',
+	'118848','119196','120098','120130','120985','121368','116242','123311','124033','118376','124524'
+	)
+union all   select '105502' as customer_no,'' as service_user_work_no,'' as service_user_name,'80890405' as work_no,'瞿林峰' as sales_name,'是' as is_part_time_service_manager,1 as salesperson_sales_value_fp_rate,1 as salesperson_profit_fp_rate,0 as service_user_sales_value_fp_rate,0 as service_user_profit_fp_rate
+union all   select '100326' as customer_no,'80009493' as service_user_work_no,'郑银燕' as service_user_name,'80007454' as work_no,'李翔' as sales_name,'是' as is_part_time_service_manager,0.3 as salesperson_sales_value_fp_rate,0.5 as salesperson_profit_fp_rate,0.3 as service_user_sales_value_fp_rate,0.5 as service_user_profit_fp_rate
+union all   select 'PF1265' as customer_no,'80972915' as service_user_work_no,'陈伟豪' as service_user_name,'80012225' as work_no,'林挺波' as sales_name,'是' as is_part_time_service_manager,0.3 as salesperson_sales_value_fp_rate,0.5 as salesperson_profit_fp_rate,0.3 as service_user_sales_value_fp_rate,0.5 as service_user_profit_fp_rate
+union all   select '105182' as customer_no,'81133021' as service_user_work_no,'黄升' as service_user_name,'81133021' as work_no,'黄升' as sales_name,'是' as is_part_time_service_manager,0.3 as salesperson_sales_value_fp_rate,0.5 as salesperson_profit_fp_rate,0 as service_user_sales_value_fp_rate,0 as service_user_profit_fp_rate
+union all   select '106721' as customer_no,'81133021' as service_user_work_no,'黄升' as service_user_name,'81133021' as work_no,'黄升' as sales_name,'是' as is_part_time_service_manager,0.3 as salesperson_sales_value_fp_rate,0.5 as salesperson_profit_fp_rate,0 as service_user_sales_value_fp_rate,0 as service_user_profit_fp_rate
+union all   select '102565' as customer_no,'81129243' as service_user_work_no,'汪敏禄' as service_user_name,'80960666' as work_no,'冯桂华' as sales_name,'是' as is_part_time_service_manager,0.3 as salesperson_sales_value_fp_rate,0.5 as salesperson_profit_fp_rate,0.3 as service_user_sales_value_fp_rate,0.5 as service_user_profit_fp_rate
+union all   select '103855' as customer_no,'81099343' as service_user_work_no,'林瑾鑫' as service_user_name,'81099343' as work_no,'林瑾鑫' as sales_name,'是' as is_part_time_service_manager,0.3 as salesperson_sales_value_fp_rate,0.5 as salesperson_profit_fp_rate,0 as service_user_sales_value_fp_rate,0 as service_user_profit_fp_rate
+union all   select '105150' as customer_no,'81133021' as service_user_work_no,'黄升' as service_user_name,'81133021' as work_no,'黄升' as sales_name,'是' as is_part_time_service_manager,0.3 as salesperson_sales_value_fp_rate,0.5 as salesperson_profit_fp_rate,0 as service_user_sales_value_fp_rate,0 as service_user_profit_fp_rate
+union all   select '111844' as customer_no,'81129243' as service_user_work_no,'汪敏禄' as service_user_name,'80960666' as work_no,'冯桂华' as sales_name,'是' as is_part_time_service_manager,0.3 as salesperson_sales_value_fp_rate,0.5 as salesperson_profit_fp_rate,0.3 as service_user_sales_value_fp_rate,0.5 as service_user_profit_fp_rate
+union all   select '102734' as customer_no,'81099343' as service_user_work_no,'林瑾鑫' as service_user_name,'80980614' as work_no,'池春梅' as sales_name,'是' as is_part_time_service_manager,0.3 as salesperson_sales_value_fp_rate,0.5 as salesperson_profit_fp_rate,0.3 as service_user_sales_value_fp_rate,0.5 as service_user_profit_fp_rate
+union all   select '107404' as customer_no,'80952742' as service_user_work_no,'王秀云' as service_user_name,'80952742' as work_no,'王秀云' as sales_name,'是' as is_part_time_service_manager,0.3 as salesperson_sales_value_fp_rate,0.5 as salesperson_profit_fp_rate,0 as service_user_sales_value_fp_rate,0 as service_user_profit_fp_rate
+union all   select '102784' as customer_no,'81099343' as service_user_work_no,'林瑾鑫' as service_user_name,'80980614' as work_no,'池春梅' as sales_name,'是' as is_part_time_service_manager,0.3 as salesperson_sales_value_fp_rate,0.5 as salesperson_profit_fp_rate,0.3 as service_user_sales_value_fp_rate,0.5 as service_user_profit_fp_rate
+union all   select '102901' as customer_no,'81131450' as service_user_work_no,'张珠妹' as service_user_name,'80980614' as work_no,'池春梅' as sales_name,'是' as is_part_time_service_manager,0.3 as salesperson_sales_value_fp_rate,0.5 as salesperson_profit_fp_rate,0.3 as service_user_sales_value_fp_rate,0.5 as service_user_profit_fp_rate
+union all   select '112288' as customer_no,'81105401' as service_user_work_no,'卢烊' as service_user_name,'80980614' as work_no,'池春梅' as sales_name,'是' as is_part_time_service_manager,0.3 as salesperson_sales_value_fp_rate,0.5 as salesperson_profit_fp_rate,0.3 as service_user_sales_value_fp_rate,0.5 as service_user_profit_fp_rate
+union all   select '113467' as customer_no,'81105401' as service_user_work_no,'卢烊' as service_user_name,'80980614' as work_no,'池春梅' as sales_name,'是' as is_part_time_service_manager,0.3 as salesperson_sales_value_fp_rate,0.5 as salesperson_profit_fp_rate,0.3 as service_user_sales_value_fp_rate,0.5 as service_user_profit_fp_rate
+union all   select '103199' as customer_no,'81105401' as service_user_work_no,'卢烊' as service_user_name,'80980614' as work_no,'池春梅' as sales_name,'是' as is_part_time_service_manager,0.3 as salesperson_sales_value_fp_rate,0.5 as salesperson_profit_fp_rate,0.3 as service_user_sales_value_fp_rate,0.5 as service_user_profit_fp_rate
+union all   select '104469' as customer_no,'81105401' as service_user_work_no,'卢烊' as service_user_name,'80980614' as work_no,'池春梅' as sales_name,'是' as is_part_time_service_manager,0.3 as salesperson_sales_value_fp_rate,0.5 as salesperson_profit_fp_rate,0.3 as service_user_sales_value_fp_rate,0.5 as service_user_profit_fp_rate
+union all   select '104501' as customer_no,'' as service_user_work_no,'' as service_user_name,'80980614' as work_no,'池春梅' as sales_name,'是' as is_part_time_service_manager,0.3 as salesperson_sales_value_fp_rate,0.5 as salesperson_profit_fp_rate,0 as service_user_sales_value_fp_rate,0 as service_user_profit_fp_rate
+union all   select '115982' as customer_no,'81105401' as service_user_work_no,'卢烊' as service_user_name,'80980614' as work_no,'池春梅' as sales_name,'是' as is_part_time_service_manager,0.3 as salesperson_sales_value_fp_rate,0.5 as salesperson_profit_fp_rate,0.3 as service_user_sales_value_fp_rate,0.5 as service_user_profit_fp_rate
+union all   select '115987' as customer_no,'81105401' as service_user_work_no,'卢烊' as service_user_name,'80980614' as work_no,'池春梅' as sales_name,'是' as is_part_time_service_manager,0.3 as salesperson_sales_value_fp_rate,0.5 as salesperson_profit_fp_rate,0.3 as service_user_sales_value_fp_rate,0.5 as service_user_profit_fp_rate
+union all   select 'PF0365' as customer_no,'81105401' as service_user_work_no,'卢烊' as service_user_name,'80980614' as work_no,'池春梅' as sales_name,'是' as is_part_time_service_manager,0.3 as salesperson_sales_value_fp_rate,0.5 as salesperson_profit_fp_rate,0.3 as service_user_sales_value_fp_rate,0.5 as service_user_profit_fp_rate
+union all   select '105355' as customer_no,'80972915' as service_user_work_no,'陈伟豪' as service_user_name,'80972915' as work_no,'陈伟豪' as sales_name,'是' as is_part_time_service_manager,0.3 as salesperson_sales_value_fp_rate,0.5 as salesperson_profit_fp_rate,0 as service_user_sales_value_fp_rate,0 as service_user_profit_fp_rate
+union all   select '105886' as customer_no,'80691224' as service_user_work_no,'王少端' as service_user_name,'80691224' as work_no,'王少端' as sales_name,'是' as is_part_time_service_manager,0.3 as salesperson_sales_value_fp_rate,0.5 as salesperson_profit_fp_rate,0 as service_user_sales_value_fp_rate,0 as service_user_profit_fp_rate
+union all   select '100563' as customer_no,'81099343' as service_user_work_no,'林瑾鑫' as service_user_name,'81099343' as work_no,'林瑾鑫' as sales_name,'是' as is_part_time_service_manager,0 as salesperson_sales_value_fp_rate,0 as salesperson_profit_fp_rate,0.3 as service_user_sales_value_fp_rate,0.5 as service_user_profit_fp_rate
+union all   select '101482' as customer_no,'80952742' as service_user_work_no,'王秀云' as service_user_name,'80952742' as work_no,'王秀云' as sales_name,'是' as is_part_time_service_manager,0 as salesperson_sales_value_fp_rate,0 as salesperson_profit_fp_rate,0.3 as service_user_sales_value_fp_rate,0.5 as service_user_profit_fp_rate
+union all   select '102229' as customer_no,'80691224' as service_user_work_no,'王少端' as service_user_name,'80691224' as work_no,'王少端' as sales_name,'是' as is_part_time_service_manager,0 as salesperson_sales_value_fp_rate,0 as salesperson_profit_fp_rate,0.3 as service_user_sales_value_fp_rate,0.5 as service_user_profit_fp_rate
+union all   select '102508' as customer_no,'80691224' as service_user_work_no,'王少端' as service_user_name,'80691224' as work_no,'王少端' as sales_name,'是' as is_part_time_service_manager,0 as salesperson_sales_value_fp_rate,0 as salesperson_profit_fp_rate,0.3 as service_user_sales_value_fp_rate,0.5 as service_user_profit_fp_rate
+union all   select '102633' as customer_no,'80691224' as service_user_work_no,'王少端' as service_user_name,'80691224' as work_no,'王少端' as sales_name,'是' as is_part_time_service_manager,0 as salesperson_sales_value_fp_rate,0 as salesperson_profit_fp_rate,0.3 as service_user_sales_value_fp_rate,0.5 as service_user_profit_fp_rate
+union all   select '102686' as customer_no,'81131450' as service_user_work_no,'张珠妹' as service_user_name,'81131450' as work_no,'张珠妹' as sales_name,'是' as is_part_time_service_manager,0 as salesperson_sales_value_fp_rate,0 as salesperson_profit_fp_rate,0.3 as service_user_sales_value_fp_rate,0.5 as service_user_profit_fp_rate
+union all   select '103062' as customer_no,'80952742' as service_user_work_no,'王秀云' as service_user_name,'80952742' as work_no,'王秀云' as sales_name,'是' as is_part_time_service_manager,0 as salesperson_sales_value_fp_rate,0 as salesperson_profit_fp_rate,0.3 as service_user_sales_value_fp_rate,0.5 as service_user_profit_fp_rate
+union all   select '103141' as customer_no,'80816155' as service_user_work_no,'张磊磊' as service_user_name,'80816155' as work_no,'张磊磊' as sales_name,'是' as is_part_time_service_manager,0 as salesperson_sales_value_fp_rate,0 as salesperson_profit_fp_rate,0.3 as service_user_sales_value_fp_rate,0.5 as service_user_profit_fp_rate
+union all   select '103372' as customer_no,'81129243' as service_user_work_no,'汪敏禄' as service_user_name,'81089088' as work_no,'陈先贵' as sales_name,'否' as is_part_time_service_manager,0 as salesperson_sales_value_fp_rate,0 as salesperson_profit_fp_rate,0.3 as service_user_sales_value_fp_rate,0.5 as service_user_profit_fp_rate
+union all   select '103714' as customer_no,'80816155' as service_user_work_no,'张磊磊' as service_user_name,'80816155' as work_no,'张磊磊' as sales_name,'是' as is_part_time_service_manager,0 as salesperson_sales_value_fp_rate,0 as salesperson_profit_fp_rate,0.3 as service_user_sales_value_fp_rate,0.5 as service_user_profit_fp_rate
+union all   select '104007' as customer_no,'80691224' as service_user_work_no,'王少端' as service_user_name,'80691224' as work_no,'王少端' as sales_name,'是' as is_part_time_service_manager,0 as salesperson_sales_value_fp_rate,0 as salesperson_profit_fp_rate,0.3 as service_user_sales_value_fp_rate,0.5 as service_user_profit_fp_rate
+union all   select '104054' as customer_no,'81129243' as service_user_work_no,'汪敏禄' as service_user_name,'81129243' as work_no,'汪敏禄' as sales_name,'是' as is_part_time_service_manager,0 as salesperson_sales_value_fp_rate,0 as salesperson_profit_fp_rate,0.3 as service_user_sales_value_fp_rate,0.5 as service_user_profit_fp_rate
+union all   select '104165' as customer_no,'80691224' as service_user_work_no,'王少端' as service_user_name,'80691224' as work_no,'王少端' as sales_name,'是' as is_part_time_service_manager,0 as salesperson_sales_value_fp_rate,0 as salesperson_profit_fp_rate,0.3 as service_user_sales_value_fp_rate,0.5 as service_user_profit_fp_rate
+union all   select '104612' as customer_no,'81099343' as service_user_work_no,'林瑾鑫' as service_user_name,'81099343' as work_no,'林瑾鑫' as sales_name,'是' as is_part_time_service_manager,0 as salesperson_sales_value_fp_rate,0 as salesperson_profit_fp_rate,0.3 as service_user_sales_value_fp_rate,0.5 as service_user_profit_fp_rate
+union all   select '104954' as customer_no,'80691224' as service_user_work_no,'王少端' as service_user_name,'80691224' as work_no,'王少端' as sales_name,'是' as is_part_time_service_manager,0 as salesperson_sales_value_fp_rate,0 as salesperson_profit_fp_rate,0.3 as service_user_sales_value_fp_rate,0.5 as service_user_profit_fp_rate
+union all   select '104970' as customer_no,'80691224' as service_user_work_no,'王少端' as service_user_name,'80691224' as work_no,'王少端' as sales_name,'是' as is_part_time_service_manager,0 as salesperson_sales_value_fp_rate,0 as salesperson_profit_fp_rate,0.3 as service_user_sales_value_fp_rate,0.5 as service_user_profit_fp_rate
+union all   select '105156' as customer_no,'80952742' as service_user_work_no,'王秀云' as service_user_name,'80952742' as work_no,'王秀云' as sales_name,'是' as is_part_time_service_manager,0 as salesperson_sales_value_fp_rate,0 as salesperson_profit_fp_rate,0.3 as service_user_sales_value_fp_rate,0.5 as service_user_profit_fp_rate
+union all   select '105177' as customer_no,'80952742' as service_user_work_no,'王秀云' as service_user_name,'80952742' as work_no,'王秀云' as sales_name,'是' as is_part_time_service_manager,0 as salesperson_sales_value_fp_rate,0 as salesperson_profit_fp_rate,0.3 as service_user_sales_value_fp_rate,0.5 as service_user_profit_fp_rate
+union all   select '105181' as customer_no,'81131450' as service_user_work_no,'张珠妹' as service_user_name,'81131450' as work_no,'张珠妹' as sales_name,'是' as is_part_time_service_manager,0 as salesperson_sales_value_fp_rate,0 as salesperson_profit_fp_rate,0.3 as service_user_sales_value_fp_rate,0.5 as service_user_profit_fp_rate
+union all   select '105225' as customer_no,'80691224' as service_user_work_no,'王少端' as service_user_name,'80691224' as work_no,'王少端' as sales_name,'是' as is_part_time_service_manager,0 as salesperson_sales_value_fp_rate,0 as salesperson_profit_fp_rate,0.3 as service_user_sales_value_fp_rate,0.5 as service_user_profit_fp_rate
+union all   select '105441' as customer_no,'80691224' as service_user_work_no,'王少端' as service_user_name,'80691224' as work_no,'王少端' as sales_name,'是' as is_part_time_service_manager,0 as salesperson_sales_value_fp_rate,0 as salesperson_profit_fp_rate,0.3 as service_user_sales_value_fp_rate,0.5 as service_user_profit_fp_rate
+union all   select '105721' as customer_no,'80952742' as service_user_work_no,'王秀云' as service_user_name,'80952742' as work_no,'王秀云' as sales_name,'是' as is_part_time_service_manager,0 as salesperson_sales_value_fp_rate,0 as salesperson_profit_fp_rate,0.3 as service_user_sales_value_fp_rate,0.5 as service_user_profit_fp_rate
+union all   select '105806' as customer_no,'80816155' as service_user_work_no,'张磊磊' as service_user_name,'80816155' as work_no,'张磊磊' as sales_name,'是' as is_part_time_service_manager,0 as salesperson_sales_value_fp_rate,0 as salesperson_profit_fp_rate,0.3 as service_user_sales_value_fp_rate,0.5 as service_user_profit_fp_rate
+union all   select '105838' as customer_no,'80816155' as service_user_work_no,'张磊磊' as service_user_name,'80816155' as work_no,'张磊磊' as sales_name,'是' as is_part_time_service_manager,0 as salesperson_sales_value_fp_rate,0 as salesperson_profit_fp_rate,0.3 as service_user_sales_value_fp_rate,0.5 as service_user_profit_fp_rate
+union all   select '105882' as customer_no,'81099343' as service_user_work_no,'林瑾鑫' as service_user_name,'81099343' as work_no,'林瑾鑫' as sales_name,'是' as is_part_time_service_manager,0 as salesperson_sales_value_fp_rate,0 as salesperson_profit_fp_rate,0.3 as service_user_sales_value_fp_rate,0.5 as service_user_profit_fp_rate
+union all   select '106423' as customer_no,'81131450' as service_user_work_no,'张珠妹' as service_user_name,'81131450' as work_no,'张珠妹' as sales_name,'是' as is_part_time_service_manager,0 as salesperson_sales_value_fp_rate,0 as salesperson_profit_fp_rate,0.3 as service_user_sales_value_fp_rate,0.5 as service_user_profit_fp_rate
+union all   select '106481' as customer_no,'81131450' as service_user_work_no,'张珠妹' as service_user_name,'81131450' as work_no,'张珠妹' as sales_name,'是' as is_part_time_service_manager,0 as salesperson_sales_value_fp_rate,0 as salesperson_profit_fp_rate,0.3 as service_user_sales_value_fp_rate,0.5 as service_user_profit_fp_rate
+union all   select '106881' as customer_no,'81131450' as service_user_work_no,'张珠妹' as service_user_name,'81131450' as work_no,'张珠妹' as sales_name,'是' as is_part_time_service_manager,0 as salesperson_sales_value_fp_rate,0 as salesperson_profit_fp_rate,0.3 as service_user_sales_value_fp_rate,0.5 as service_user_profit_fp_rate
+union all   select '107371' as customer_no,'81129243' as service_user_work_no,'汪敏禄' as service_user_name,'81129243' as work_no,'汪敏禄' as sales_name,'是' as is_part_time_service_manager,0 as salesperson_sales_value_fp_rate,0 as salesperson_profit_fp_rate,0.3 as service_user_sales_value_fp_rate,0.5 as service_user_profit_fp_rate
+union all   select '108127' as customer_no,'81133021' as service_user_work_no,'黄升' as service_user_name,'81133021' as work_no,'黄升' as sales_name,'是' as is_part_time_service_manager,0 as salesperson_sales_value_fp_rate,0 as salesperson_profit_fp_rate,0.3 as service_user_sales_value_fp_rate,0.5 as service_user_profit_fp_rate
+union all   select '108739' as customer_no,'81099343' as service_user_work_no,'林瑾鑫' as service_user_name,'81099343' as work_no,'林瑾鑫' as sales_name,'是' as is_part_time_service_manager,0 as salesperson_sales_value_fp_rate,0 as salesperson_profit_fp_rate,0.3 as service_user_sales_value_fp_rate,0.5 as service_user_profit_fp_rate
+union all   select '109377' as customer_no,'81099343' as service_user_work_no,'林瑾鑫' as service_user_name,'81099343' as work_no,'林瑾鑫' as sales_name,'是' as is_part_time_service_manager,0 as salesperson_sales_value_fp_rate,0 as salesperson_profit_fp_rate,0.3 as service_user_sales_value_fp_rate,0.5 as service_user_profit_fp_rate
+union all   select '111241' as customer_no,'80952742' as service_user_work_no,'王秀云' as service_user_name,'80952742' as work_no,'王秀云' as sales_name,'是' as is_part_time_service_manager,0 as salesperson_sales_value_fp_rate,0 as salesperson_profit_fp_rate,0.3 as service_user_sales_value_fp_rate,0.5 as service_user_profit_fp_rate
+union all   select '112062' as customer_no,'80816155' as service_user_work_no,'张磊磊' as service_user_name,'80816155' as work_no,'张磊磊' as sales_name,'是' as is_part_time_service_manager,0 as salesperson_sales_value_fp_rate,0 as salesperson_profit_fp_rate,0.3 as service_user_sales_value_fp_rate,0.5 as service_user_profit_fp_rate
+union all   select '112327' as customer_no,'80691224' as service_user_work_no,'王少端' as service_user_name,'80691224' as work_no,'王少端' as sales_name,'是' as is_part_time_service_manager,0 as salesperson_sales_value_fp_rate,0 as salesperson_profit_fp_rate,0.3 as service_user_sales_value_fp_rate,0.5 as service_user_profit_fp_rate
+union all   select '113101' as customer_no,'80691224' as service_user_work_no,'王少端' as service_user_name,'80691224' as work_no,'王少端' as sales_name,'是' as is_part_time_service_manager,0 as salesperson_sales_value_fp_rate,0 as salesperson_profit_fp_rate,0.3 as service_user_sales_value_fp_rate,0.5 as service_user_profit_fp_rate
+union all   select '113635' as customer_no,'80691224' as service_user_work_no,'王少端' as service_user_name,'80691224' as work_no,'王少端' as sales_name,'是' as is_part_time_service_manager,0 as salesperson_sales_value_fp_rate,0 as salesperson_profit_fp_rate,0.3 as service_user_sales_value_fp_rate,0.5 as service_user_profit_fp_rate
+union all   select '113646' as customer_no,'80691224' as service_user_work_no,'王少端' as service_user_name,'80691224' as work_no,'王少端' as sales_name,'是' as is_part_time_service_manager,0 as salesperson_sales_value_fp_rate,0 as salesperson_profit_fp_rate,0.3 as service_user_sales_value_fp_rate,0.5 as service_user_profit_fp_rate
+union all   select '114344' as customer_no,'' as service_user_work_no,'' as service_user_name,'80005782' as work_no,'杨海燕' as sales_name,'是' as is_part_time_service_manager,0.3 as salesperson_sales_value_fp_rate,0.5 as salesperson_profit_fp_rate,0 as service_user_sales_value_fp_rate,0 as service_user_profit_fp_rate
+union all   select '115324' as customer_no,'80816155' as service_user_work_no,'张磊磊' as service_user_name,'80816155' as work_no,'张磊磊' as sales_name,'是' as is_part_time_service_manager,0 as salesperson_sales_value_fp_rate,0 as salesperson_profit_fp_rate,0.3 as service_user_sales_value_fp_rate,0.5 as service_user_profit_fp_rate
+union all   select '115646' as customer_no,'80816155' as service_user_work_no,'张磊磊' as service_user_name,'80816155' as work_no,'张磊磊' as sales_name,'是' as is_part_time_service_manager,0 as salesperson_sales_value_fp_rate,0 as salesperson_profit_fp_rate,0.3 as service_user_sales_value_fp_rate,0.5 as service_user_profit_fp_rate
+union all   select '115679' as customer_no,'80816155' as service_user_work_no,'张磊磊' as service_user_name,'80816155' as work_no,'张磊磊' as sales_name,'是' as is_part_time_service_manager,0 as salesperson_sales_value_fp_rate,0 as salesperson_profit_fp_rate,0.3 as service_user_sales_value_fp_rate,0.5 as service_user_profit_fp_rate
+union all   select '115857' as customer_no,'80816155' as service_user_work_no,'张磊磊' as service_user_name,'80816155' as work_no,'张磊磊' as sales_name,'是' as is_part_time_service_manager,0 as salesperson_sales_value_fp_rate,0 as salesperson_profit_fp_rate,0.3 as service_user_sales_value_fp_rate,0.5 as service_user_profit_fp_rate
+union all   select '116211' as customer_no,'80816155' as service_user_work_no,'张磊磊' as service_user_name,'80816155' as work_no,'张磊磊' as sales_name,'是' as is_part_time_service_manager,0 as salesperson_sales_value_fp_rate,0 as salesperson_profit_fp_rate,0.3 as service_user_sales_value_fp_rate,0.5 as service_user_profit_fp_rate
+union all   select '118687' as customer_no,'81099343' as service_user_work_no,'林瑾鑫' as service_user_name,'81099343' as work_no,'林瑾鑫' as sales_name,'是' as is_part_time_service_manager,0 as salesperson_sales_value_fp_rate,0 as salesperson_profit_fp_rate,0.3 as service_user_sales_value_fp_rate,0.5 as service_user_profit_fp_rate
+union all   select 'PF0094' as customer_no,'81099343' as service_user_work_no,'林瑾鑫' as service_user_name,'81099343' as work_no,'林瑾鑫' as sales_name,'是' as is_part_time_service_manager,0 as salesperson_sales_value_fp_rate,0 as salesperson_profit_fp_rate,0.3 as service_user_sales_value_fp_rate,0.5 as service_user_profit_fp_rate
+union all   select 'PF1205' as customer_no,'80816155' as service_user_work_no,'张磊磊' as service_user_name,'80816155' as work_no,'张磊磊' as sales_name,'是' as is_part_time_service_manager,0 as salesperson_sales_value_fp_rate,0 as salesperson_profit_fp_rate,0.3 as service_user_sales_value_fp_rate,0.5 as service_user_profit_fp_rate
+union all   select '104281' as customer_no,'' as service_user_work_no,'' as service_user_name,'80974184' as work_no,'郭荔丽' as sales_name,'是' as is_part_time_service_manager,0.3 as salesperson_sales_value_fp_rate,0.5 as salesperson_profit_fp_rate,0 as service_user_sales_value_fp_rate,0 as service_user_profit_fp_rate
+union all   select '115656' as customer_no,'' as service_user_work_no,'' as service_user_name,'80974184' as work_no,'郭荔丽' as sales_name,'是' as is_part_time_service_manager,0.3 as salesperson_sales_value_fp_rate,0.5 as salesperson_profit_fp_rate,0 as service_user_sales_value_fp_rate,0 as service_user_profit_fp_rate
+union all   select '105593' as customer_no,'' as service_user_work_no,'' as service_user_name,'1000002' as work_no,'莆田B' as sales_name,'是' as is_part_time_service_manager,0.3 as salesperson_sales_value_fp_rate,0.5 as salesperson_profit_fp_rate,0 as service_user_sales_value_fp_rate,0 as service_user_profit_fp_rate
+union all   select '107398' as customer_no,'' as service_user_work_no,'' as service_user_name,'80974184' as work_no,'郭荔丽' as sales_name,'是' as is_part_time_service_manager,0.3 as salesperson_sales_value_fp_rate,0.5 as salesperson_profit_fp_rate,0 as service_user_sales_value_fp_rate,0 as service_user_profit_fp_rate
+union all   select '109447' as customer_no,'' as service_user_work_no,'' as service_user_name,'1000002' as work_no,'莆田B' as sales_name,'是' as is_part_time_service_manager,0.3 as salesperson_sales_value_fp_rate,0.5 as salesperson_profit_fp_rate,0 as service_user_sales_value_fp_rate,0 as service_user_profit_fp_rate
+union all   select '111207' as customer_no,'' as service_user_work_no,'' as service_user_name,'80974184' as work_no,'郭荔丽' as sales_name,'是' as is_part_time_service_manager,0.3 as salesperson_sales_value_fp_rate,0.5 as salesperson_profit_fp_rate,0 as service_user_sales_value_fp_rate,0 as service_user_profit_fp_rate
+union all   select '115537' as customer_no,'' as service_user_work_no,'' as service_user_name,'80974184' as work_no,'郭荔丽' as sales_name,'是' as is_part_time_service_manager,0.3 as salesperson_sales_value_fp_rate,0.5 as salesperson_profit_fp_rate,0 as service_user_sales_value_fp_rate,0 as service_user_profit_fp_rate
+union all   select '115602' as customer_no,'' as service_user_work_no,'' as service_user_name,'80974184' as work_no,'郭荔丽' as sales_name,'是' as is_part_time_service_manager,0.3 as salesperson_sales_value_fp_rate,0.5 as salesperson_profit_fp_rate,0 as service_user_sales_value_fp_rate,0 as service_user_profit_fp_rate
+union all   select '115826' as customer_no,'' as service_user_work_no,'' as service_user_name,'80974184' as work_no,'郭荔丽' as sales_name,'是' as is_part_time_service_manager,0.3 as salesperson_sales_value_fp_rate,0.5 as salesperson_profit_fp_rate,0 as service_user_sales_value_fp_rate,0 as service_user_profit_fp_rate
+union all   select '117244' as customer_no,'' as service_user_work_no,'' as service_user_name,'80974184' as work_no,'郭荔丽' as sales_name,'是' as is_part_time_service_manager,0.3 as salesperson_sales_value_fp_rate,0.5 as salesperson_profit_fp_rate,0 as service_user_sales_value_fp_rate,0 as service_user_profit_fp_rate
+union all   select '123065' as customer_no,'' as service_user_work_no,'' as service_user_name,'1000002' as work_no,'莆田B' as sales_name,'是' as is_part_time_service_manager,0.3 as salesperson_sales_value_fp_rate,0.5 as salesperson_profit_fp_rate,0 as service_user_sales_value_fp_rate,0 as service_user_profit_fp_rate
+union all   select '125534' as customer_no,'' as service_user_work_no,'' as service_user_name,'80974184' as work_no,'郭荔丽' as sales_name,'是' as is_part_time_service_manager,0.3 as salesperson_sales_value_fp_rate,0.5 as salesperson_profit_fp_rate,0 as service_user_sales_value_fp_rate,0 as service_user_profit_fp_rate
+union all   select '116015' as customer_no,'' as service_user_work_no,'' as service_user_name,'81139788' as work_no,'邓肯' as sales_name,'是' as is_part_time_service_manager,0.3 as salesperson_sales_value_fp_rate,0.5 as salesperson_profit_fp_rate,0 as service_user_sales_value_fp_rate,0 as service_user_profit_fp_rate
+union all   select '115721' as customer_no,'' as service_user_work_no,'' as service_user_name,'81122750' as work_no,'吴煌锦' as sales_name,'是' as is_part_time_service_manager,0.3 as salesperson_sales_value_fp_rate,0.5 as salesperson_profit_fp_rate,0 as service_user_sales_value_fp_rate,0 as service_user_profit_fp_rate
+union all   select '119703' as customer_no,'' as service_user_work_no,'' as service_user_name,'81122750' as work_no,'吴煌锦' as sales_name,'是' as is_part_time_service_manager,0.3 as salesperson_sales_value_fp_rate,0.5 as salesperson_profit_fp_rate,0 as service_user_sales_value_fp_rate,0 as service_user_profit_fp_rate
+union all   select '118887' as customer_no,'' as service_user_work_no,'' as service_user_name,'81122750' as work_no,'吴煌锦' as sales_name,'是' as is_part_time_service_manager,0.3 as salesperson_sales_value_fp_rate,0.5 as salesperson_profit_fp_rate,0 as service_user_sales_value_fp_rate,0 as service_user_profit_fp_rate
+union all   select '116556' as customer_no,'' as service_user_work_no,'' as service_user_name,'81139788' as work_no,'邓肯' as sales_name,'是' as is_part_time_service_manager,0.3 as salesperson_sales_value_fp_rate,0.5 as salesperson_profit_fp_rate,0 as service_user_sales_value_fp_rate,0 as service_user_profit_fp_rate
+union all   select '116733' as customer_no,'' as service_user_work_no,'' as service_user_name,'81055717' as work_no,'魏隆强' as sales_name,'是' as is_part_time_service_manager,0.3 as salesperson_sales_value_fp_rate,0.5 as salesperson_profit_fp_rate,0 as service_user_sales_value_fp_rate,0 as service_user_profit_fp_rate
+union all   select '116702' as customer_no,'' as service_user_work_no,'' as service_user_name,'81122750' as work_no,'吴煌锦' as sales_name,'是' as is_part_time_service_manager,0.3 as salesperson_sales_value_fp_rate,0.5 as salesperson_profit_fp_rate,0 as service_user_sales_value_fp_rate,0 as service_user_profit_fp_rate
+union all   select '116923' as customer_no,'' as service_user_work_no,'' as service_user_name,'81122750' as work_no,'吴煌锦' as sales_name,'是' as is_part_time_service_manager,0.3 as salesperson_sales_value_fp_rate,0.5 as salesperson_profit_fp_rate,0 as service_user_sales_value_fp_rate,0 as service_user_profit_fp_rate
+union all   select '116863' as customer_no,'' as service_user_work_no,'' as service_user_name,'81122750' as work_no,'吴煌锦' as sales_name,'是' as is_part_time_service_manager,0.3 as salesperson_sales_value_fp_rate,0.5 as salesperson_profit_fp_rate,0 as service_user_sales_value_fp_rate,0 as service_user_profit_fp_rate
+union all   select '116883' as customer_no,'' as service_user_work_no,'' as service_user_name,'81122750' as work_no,'吴煌锦' as sales_name,'是' as is_part_time_service_manager,0.3 as salesperson_sales_value_fp_rate,0.5 as salesperson_profit_fp_rate,0 as service_user_sales_value_fp_rate,0 as service_user_profit_fp_rate
+union all   select '116877' as customer_no,'' as service_user_work_no,'' as service_user_name,'81122750' as work_no,'吴煌锦' as sales_name,'是' as is_part_time_service_manager,0.3 as salesperson_sales_value_fp_rate,0.5 as salesperson_profit_fp_rate,0 as service_user_sales_value_fp_rate,0 as service_user_profit_fp_rate
+union all   select '116826' as customer_no,'' as service_user_work_no,'' as service_user_name,'81139788' as work_no,'邓肯' as sales_name,'是' as is_part_time_service_manager,0.3 as salesperson_sales_value_fp_rate,0.5 as salesperson_profit_fp_rate,0 as service_user_sales_value_fp_rate,0 as service_user_profit_fp_rate
+union all   select '123534' as customer_no,'' as service_user_work_no,'' as service_user_name,'81055717' as work_no,'魏隆强' as sales_name,'是' as is_part_time_service_manager,0.3 as salesperson_sales_value_fp_rate,0.5 as salesperson_profit_fp_rate,0 as service_user_sales_value_fp_rate,0 as service_user_profit_fp_rate
+union all   select '116967' as customer_no,'' as service_user_work_no,'' as service_user_name,'81122750' as work_no,'吴煌锦' as sales_name,'是' as is_part_time_service_manager,0.3 as salesperson_sales_value_fp_rate,0.5 as salesperson_profit_fp_rate,0 as service_user_sales_value_fp_rate,0 as service_user_profit_fp_rate
+union all   select '117026' as customer_no,'' as service_user_work_no,'' as service_user_name,'81122750' as work_no,'吴煌锦' as sales_name,'是' as is_part_time_service_manager,0.3 as salesperson_sales_value_fp_rate,0.5 as salesperson_profit_fp_rate,0 as service_user_sales_value_fp_rate,0 as service_user_profit_fp_rate
+union all   select '117025' as customer_no,'' as service_user_work_no,'' as service_user_name,'81122750' as work_no,'吴煌锦' as sales_name,'是' as is_part_time_service_manager,0.3 as salesperson_sales_value_fp_rate,0.5 as salesperson_profit_fp_rate,0 as service_user_sales_value_fp_rate,0 as service_user_profit_fp_rate
+union all   select '117009' as customer_no,'' as service_user_work_no,'' as service_user_name,'81122750' as work_no,'吴煌锦' as sales_name,'是' as is_part_time_service_manager,0.3 as salesperson_sales_value_fp_rate,0.5 as salesperson_profit_fp_rate,0 as service_user_sales_value_fp_rate,0 as service_user_profit_fp_rate
+union all   select '117045' as customer_no,'' as service_user_work_no,'' as service_user_name,'81122750' as work_no,'吴煌锦' as sales_name,'是' as is_part_time_service_manager,0.3 as salesperson_sales_value_fp_rate,0.5 as salesperson_profit_fp_rate,0 as service_user_sales_value_fp_rate,0 as service_user_profit_fp_rate
+union all   select '117040' as customer_no,'' as service_user_work_no,'' as service_user_name,'81122750' as work_no,'吴煌锦' as sales_name,'是' as is_part_time_service_manager,0.3 as salesperson_sales_value_fp_rate,0.5 as salesperson_profit_fp_rate,0 as service_user_sales_value_fp_rate,0 as service_user_profit_fp_rate
+union all   select '117035' as customer_no,'' as service_user_work_no,'' as service_user_name,'81122750' as work_no,'吴煌锦' as sales_name,'是' as is_part_time_service_manager,0.3 as salesperson_sales_value_fp_rate,0.5 as salesperson_profit_fp_rate,0 as service_user_sales_value_fp_rate,0 as service_user_profit_fp_rate
+union all   select '116944' as customer_no,'' as service_user_work_no,'' as service_user_name,'81122750' as work_no,'吴煌锦' as sales_name,'是' as is_part_time_service_manager,0.3 as salesperson_sales_value_fp_rate,0.5 as salesperson_profit_fp_rate,0 as service_user_sales_value_fp_rate,0 as service_user_profit_fp_rate
+union all   select '117030' as customer_no,'' as service_user_work_no,'' as service_user_name,'81122750' as work_no,'吴煌锦' as sales_name,'是' as is_part_time_service_manager,0.3 as salesperson_sales_value_fp_rate,0.5 as salesperson_profit_fp_rate,0 as service_user_sales_value_fp_rate,0 as service_user_profit_fp_rate
+union all   select '117027' as customer_no,'' as service_user_work_no,'' as service_user_name,'81122750' as work_no,'吴煌锦' as sales_name,'是' as is_part_time_service_manager,0.3 as salesperson_sales_value_fp_rate,0.5 as salesperson_profit_fp_rate,0 as service_user_sales_value_fp_rate,0 as service_user_profit_fp_rate
+union all   select '116903' as customer_no,'' as service_user_work_no,'' as service_user_name,'81122750' as work_no,'吴煌锦' as sales_name,'是' as is_part_time_service_manager,0.3 as salesperson_sales_value_fp_rate,0.5 as salesperson_profit_fp_rate,0 as service_user_sales_value_fp_rate,0 as service_user_profit_fp_rate
+union all   select '116994' as customer_no,'' as service_user_work_no,'' as service_user_name,'81122750' as work_no,'吴煌锦' as sales_name,'是' as is_part_time_service_manager,0.3 as salesperson_sales_value_fp_rate,0.5 as salesperson_profit_fp_rate,0 as service_user_sales_value_fp_rate,0 as service_user_profit_fp_rate
+union all   select '117019' as customer_no,'' as service_user_work_no,'' as service_user_name,'81122750' as work_no,'吴煌锦' as sales_name,'是' as is_part_time_service_manager,0.3 as salesperson_sales_value_fp_rate,0.5 as salesperson_profit_fp_rate,0 as service_user_sales_value_fp_rate,0 as service_user_profit_fp_rate
+union all   select '116993' as customer_no,'' as service_user_work_no,'' as service_user_name,'81122750' as work_no,'吴煌锦' as sales_name,'是' as is_part_time_service_manager,0.3 as salesperson_sales_value_fp_rate,0.5 as salesperson_profit_fp_rate,0 as service_user_sales_value_fp_rate,0 as service_user_profit_fp_rate
+union all   select '116989' as customer_no,'' as service_user_work_no,'' as service_user_name,'81122750' as work_no,'吴煌锦' as sales_name,'是' as is_part_time_service_manager,0.3 as salesperson_sales_value_fp_rate,0.5 as salesperson_profit_fp_rate,0 as service_user_sales_value_fp_rate,0 as service_user_profit_fp_rate
+union all   select '123716' as customer_no,'' as service_user_work_no,'' as service_user_name,'81122750' as work_no,'吴煌锦' as sales_name,'是' as is_part_time_service_manager,0.3 as salesperson_sales_value_fp_rate,0.5 as salesperson_profit_fp_rate,0 as service_user_sales_value_fp_rate,0 as service_user_profit_fp_rate
+union all   select '120100' as customer_no,'' as service_user_work_no,'' as service_user_name,'81122750' as work_no,'吴煌锦' as sales_name,'是' as is_part_time_service_manager,0.3 as salesperson_sales_value_fp_rate,0.5 as salesperson_profit_fp_rate,0 as service_user_sales_value_fp_rate,0 as service_user_profit_fp_rate
+union all   select '119806' as customer_no,'' as service_user_work_no,'' as service_user_name,'81122750' as work_no,'吴煌锦' as sales_name,'是' as is_part_time_service_manager,0.3 as salesperson_sales_value_fp_rate,0.5 as salesperson_profit_fp_rate,0 as service_user_sales_value_fp_rate,0 as service_user_profit_fp_rate
+union all   select '119803' as customer_no,'' as service_user_work_no,'' as service_user_name,'81122750' as work_no,'吴煌锦' as sales_name,'是' as is_part_time_service_manager,0.3 as salesperson_sales_value_fp_rate,0.5 as salesperson_profit_fp_rate,0 as service_user_sales_value_fp_rate,0 as service_user_profit_fp_rate
+union all   select '119815' as customer_no,'' as service_user_work_no,'' as service_user_name,'81122750' as work_no,'吴煌锦' as sales_name,'是' as is_part_time_service_manager,0.3 as salesperson_sales_value_fp_rate,0.5 as salesperson_profit_fp_rate,0 as service_user_sales_value_fp_rate,0 as service_user_profit_fp_rate
+union all   select '120463' as customer_no,'' as service_user_work_no,'' as service_user_name,'90000002' as work_no,'三明B' as sales_name,'是' as is_part_time_service_manager,0.3 as salesperson_sales_value_fp_rate,0.5 as salesperson_profit_fp_rate,0 as service_user_sales_value_fp_rate,0 as service_user_profit_fp_rate
+union all   select '122125' as customer_no,'' as service_user_work_no,'' as service_user_name,'81122750' as work_no,'吴煌锦' as sales_name,'是' as is_part_time_service_manager,0.3 as salesperson_sales_value_fp_rate,0.5 as salesperson_profit_fp_rate,0 as service_user_sales_value_fp_rate,0 as service_user_profit_fp_rate
+union all   select '122106' as customer_no,'' as service_user_work_no,'' as service_user_name,'81122750' as work_no,'吴煌锦' as sales_name,'是' as is_part_time_service_manager,0.3 as salesperson_sales_value_fp_rate,0.5 as salesperson_profit_fp_rate,0 as service_user_sales_value_fp_rate,0 as service_user_profit_fp_rate
+union all   select '121763' as customer_no,'' as service_user_work_no,'' as service_user_name,'81122750' as work_no,'吴煌锦' as sales_name,'是' as is_part_time_service_manager,0.3 as salesperson_sales_value_fp_rate,0.5 as salesperson_profit_fp_rate,0 as service_user_sales_value_fp_rate,0 as service_user_profit_fp_rate
+union all   select '122375' as customer_no,'' as service_user_work_no,'' as service_user_name,'81122750' as work_no,'吴煌锦' as sales_name,'是' as is_part_time_service_manager,0.3 as salesperson_sales_value_fp_rate,0.5 as salesperson_profit_fp_rate,0 as service_user_sales_value_fp_rate,0 as service_user_profit_fp_rate
+union all   select '122286' as customer_no,'' as service_user_work_no,'' as service_user_name,'81122750' as work_no,'吴煌锦' as sales_name,'是' as is_part_time_service_manager,0.3 as salesperson_sales_value_fp_rate,0.5 as salesperson_profit_fp_rate,0 as service_user_sales_value_fp_rate,0 as service_user_profit_fp_rate
+union all   select '122371' as customer_no,'' as service_user_work_no,'' as service_user_name,'81122750' as work_no,'吴煌锦' as sales_name,'是' as is_part_time_service_manager,0.3 as salesperson_sales_value_fp_rate,0.5 as salesperson_profit_fp_rate,0 as service_user_sales_value_fp_rate,0 as service_user_profit_fp_rate
+union all   select '123060' as customer_no,'' as service_user_work_no,'' as service_user_name,'90000002' as work_no,'三明B' as sales_name,'是' as is_part_time_service_manager,0.3 as salesperson_sales_value_fp_rate,0.5 as salesperson_profit_fp_rate,0 as service_user_sales_value_fp_rate,0 as service_user_profit_fp_rate
+union all   select '123383' as customer_no,'' as service_user_work_no,'' as service_user_name,'LL000001' as work_no,'彭先檩（三明）' as sales_name,'是' as is_part_time_service_manager,0.3 as salesperson_sales_value_fp_rate,0.5 as salesperson_profit_fp_rate,0 as service_user_sales_value_fp_rate,0 as service_user_profit_fp_rate
+union all   select '123644' as customer_no,'' as service_user_work_no,'' as service_user_name,'81122750' as work_no,'吴煌锦' as sales_name,'是' as is_part_time_service_manager,0.3 as salesperson_sales_value_fp_rate,0.5 as salesperson_profit_fp_rate,0 as service_user_sales_value_fp_rate,0 as service_user_profit_fp_rate
+union all   select '123813' as customer_no,'' as service_user_work_no,'' as service_user_name,'81122750' as work_no,'吴煌锦' as sales_name,'是' as is_part_time_service_manager,0.3 as salesperson_sales_value_fp_rate,0.5 as salesperson_profit_fp_rate,0 as service_user_sales_value_fp_rate,0 as service_user_profit_fp_rate
+union all   select '124179' as customer_no,'' as service_user_work_no,'' as service_user_name,'81102377' as work_no,'刘寒漪' as sales_name,'是' as is_part_time_service_manager,0.3 as salesperson_sales_value_fp_rate,0.5 as salesperson_profit_fp_rate,0 as service_user_sales_value_fp_rate,0 as service_user_profit_fp_rate
+union all   select '125244' as customer_no,'' as service_user_work_no,'' as service_user_name,'81139788' as work_no,'邓肯' as sales_name,'是' as is_part_time_service_manager,0.3 as salesperson_sales_value_fp_rate,0.5 as salesperson_profit_fp_rate,0 as service_user_sales_value_fp_rate,0 as service_user_profit_fp_rate
+union all   select '125508' as customer_no,'' as service_user_work_no,'' as service_user_name,'81122750' as work_no,'吴煌锦' as sales_name,'是' as is_part_time_service_manager,0.3 as salesperson_sales_value_fp_rate,0.5 as salesperson_profit_fp_rate,0 as service_user_sales_value_fp_rate,0 as service_user_profit_fp_rate
+union all   select '103183' as customer_no,'' as service_user_work_no,'' as service_user_name,'80007454' as work_no,'李翔' as sales_name,'是' as is_part_time_service_manager,0.3 as salesperson_sales_value_fp_rate,0.5 as salesperson_profit_fp_rate,0 as service_user_sales_value_fp_rate,0 as service_user_profit_fp_rate
+union all   select '104086' as customer_no,'' as service_user_work_no,'' as service_user_name,'81026931' as work_no,'林圳' as sales_name,'是' as is_part_time_service_manager,0.3 as salesperson_sales_value_fp_rate,0.5 as salesperson_profit_fp_rate,0 as service_user_sales_value_fp_rate,0 as service_user_profit_fp_rate
+union all   select '104397' as customer_no,'' as service_user_work_no,'' as service_user_name,'80007454' as work_no,'李翔' as sales_name,'是' as is_part_time_service_manager,0.3 as salesperson_sales_value_fp_rate,0.5 as salesperson_profit_fp_rate,0 as service_user_sales_value_fp_rate,0 as service_user_profit_fp_rate
+union all   select '100984' as customer_no,'' as service_user_work_no,'' as service_user_name,'80007454' as work_no,'李翔' as sales_name,'是' as is_part_time_service_manager,0.3 as salesperson_sales_value_fp_rate,0.5 as salesperson_profit_fp_rate,0 as service_user_sales_value_fp_rate,0 as service_user_profit_fp_rate
+union all   select '105499' as customer_no,'' as service_user_work_no,'' as service_user_name,'81026931' as work_no,'林圳' as sales_name,'是' as is_part_time_service_manager,0.3 as salesperson_sales_value_fp_rate,0.5 as salesperson_profit_fp_rate,0 as service_user_sales_value_fp_rate,0 as service_user_profit_fp_rate
+union all   select '114843' as customer_no,'' as service_user_work_no,'' as service_user_name,'81016757' as work_no,'吴周机' as sales_name,'是' as is_part_time_service_manager,0.3 as salesperson_sales_value_fp_rate,0.5 as salesperson_profit_fp_rate,0 as service_user_sales_value_fp_rate,0 as service_user_profit_fp_rate
+union all   select '108589' as customer_no,'' as service_user_work_no,'' as service_user_name,'80936091' as work_no,'刘鹏' as sales_name,'是' as is_part_time_service_manager,0.3 as salesperson_sales_value_fp_rate,0.5 as salesperson_profit_fp_rate,0 as service_user_sales_value_fp_rate,0 as service_user_profit_fp_rate
+union all   select '102580' as customer_no,'' as service_user_work_no,'' as service_user_name,'80929710' as work_no,'王坚' as sales_name,'是' as is_part_time_service_manager,0.3 as salesperson_sales_value_fp_rate,0.5 as salesperson_profit_fp_rate,0 as service_user_sales_value_fp_rate,0 as service_user_profit_fp_rate
+union all   select '102890' as customer_no,'' as service_user_work_no,'' as service_user_name,'80895350' as work_no,'陈聪' as sales_name,'是' as is_part_time_service_manager,0.3 as salesperson_sales_value_fp_rate,0.5 as salesperson_profit_fp_rate,0 as service_user_sales_value_fp_rate,0 as service_user_profit_fp_rate
+union all   select 'PF0099' as customer_no,'' as service_user_work_no,'' as service_user_name,'80924363' as work_no,'胡康灿' as sales_name,'是' as is_part_time_service_manager,0.3 as salesperson_sales_value_fp_rate,0.5 as salesperson_profit_fp_rate,0 as service_user_sales_value_fp_rate,0 as service_user_profit_fp_rate
+union all   select '116099' as customer_no,'' as service_user_work_no,'' as service_user_name,'80912701' as work_no,'蓝梦玲' as sales_name,'是' as is_part_time_service_manager,0.3 as salesperson_sales_value_fp_rate,0.5 as salesperson_profit_fp_rate,0 as service_user_sales_value_fp_rate,0 as service_user_profit_fp_rate
+union all   select '106301' as customer_no,'' as service_user_work_no,'' as service_user_name,'81042140' as work_no,'林志雄' as sales_name,'是' as is_part_time_service_manager,0.3 as salesperson_sales_value_fp_rate,0.5 as salesperson_profit_fp_rate,0 as service_user_sales_value_fp_rate,0 as service_user_profit_fp_rate
+union all   select '106306' as customer_no,'' as service_user_work_no,'' as service_user_name,'81042140' as work_no,'林志雄' as sales_name,'是' as is_part_time_service_manager,0.3 as salesperson_sales_value_fp_rate,0.5 as salesperson_profit_fp_rate,0 as service_user_sales_value_fp_rate,0 as service_user_profit_fp_rate
+union all   select '120246' as customer_no,'' as service_user_work_no,'' as service_user_name,'81062977' as work_no,'邱维海' as sales_name,'是' as is_part_time_service_manager,0.3 as salesperson_sales_value_fp_rate,0.5 as salesperson_profit_fp_rate,0 as service_user_sales_value_fp_rate,0 as service_user_profit_fp_rate
+union all   select '120689' as customer_no,'' as service_user_work_no,'' as service_user_name,'81118962' as work_no,'陈威仁' as sales_name,'是' as is_part_time_service_manager,0.3 as salesperson_sales_value_fp_rate,0.5 as salesperson_profit_fp_rate,0 as service_user_sales_value_fp_rate,0 as service_user_profit_fp_rate
+union all   select '117047' as customer_no,'' as service_user_work_no,'' as service_user_name,'81043405' as work_no,'魏桓' as sales_name,'是' as is_part_time_service_manager,0.3 as salesperson_sales_value_fp_rate,0.5 as salesperson_profit_fp_rate,0 as service_user_sales_value_fp_rate,0 as service_user_profit_fp_rate
+union all   select '118836' as customer_no,'' as service_user_work_no,'' as service_user_name,'81042140' as work_no,'林志雄' as sales_name,'是' as is_part_time_service_manager,0.3 as salesperson_sales_value_fp_rate,0.5 as salesperson_profit_fp_rate,0 as service_user_sales_value_fp_rate,0 as service_user_profit_fp_rate
+union all   select '115899' as customer_no,'' as service_user_work_no,'' as service_user_name,'81118962' as work_no,'陈威仁' as sales_name,'是' as is_part_time_service_manager,0.3 as salesperson_sales_value_fp_rate,0.5 as salesperson_profit_fp_rate,0 as service_user_sales_value_fp_rate,0 as service_user_profit_fp_rate
+union all   select '116398' as customer_no,'' as service_user_work_no,'' as service_user_name,'81043405' as work_no,'魏桓' as sales_name,'是' as is_part_time_service_manager,0.3 as salesperson_sales_value_fp_rate,0.5 as salesperson_profit_fp_rate,0 as service_user_sales_value_fp_rate,0 as service_user_profit_fp_rate
+union all   select '122143' as customer_no,'' as service_user_work_no,'' as service_user_name,'81097555' as work_no,'沈文乾' as sales_name,'是' as is_part_time_service_manager,0.3 as salesperson_sales_value_fp_rate,0.5 as salesperson_profit_fp_rate,0 as service_user_sales_value_fp_rate,0 as service_user_profit_fp_rate
+union all   select '117108' as customer_no,'' as service_user_work_no,'' as service_user_name,'81042140' as work_no,'林志雄' as sales_name,'是' as is_part_time_service_manager,0.3 as salesperson_sales_value_fp_rate,0.5 as salesperson_profit_fp_rate,0 as service_user_sales_value_fp_rate,0 as service_user_profit_fp_rate
+union all   select '123827' as customer_no,'' as service_user_work_no,'' as service_user_name,'81042140' as work_no,'林志雄' as sales_name,'是' as is_part_time_service_manager,0.3 as salesperson_sales_value_fp_rate,0.5 as salesperson_profit_fp_rate,0 as service_user_sales_value_fp_rate,0 as service_user_profit_fp_rate
+union all   select '117121' as customer_no,'' as service_user_work_no,'' as service_user_name,'81062977' as work_no,'邱维海' as sales_name,'是' as is_part_time_service_manager,0.3 as salesperson_sales_value_fp_rate,0.5 as salesperson_profit_fp_rate,0 as service_user_sales_value_fp_rate,0 as service_user_profit_fp_rate
+union all   select '117222' as customer_no,'' as service_user_work_no,'' as service_user_name,'81097555' as work_no,'沈文乾' as sales_name,'是' as is_part_time_service_manager,0.3 as salesperson_sales_value_fp_rate,0.5 as salesperson_profit_fp_rate,0 as service_user_sales_value_fp_rate,0 as service_user_profit_fp_rate
+union all   select '123442' as customer_no,'' as service_user_work_no,'' as service_user_name,'81062977' as work_no,'邱维海' as sales_name,'是' as is_part_time_service_manager,0.3 as salesperson_sales_value_fp_rate,0.5 as salesperson_profit_fp_rate,0 as service_user_sales_value_fp_rate,0 as service_user_profit_fp_rate
+union all   select '120735' as customer_no,'' as service_user_work_no,'' as service_user_name,'81062977' as work_no,'邱维海' as sales_name,'是' as is_part_time_service_manager,0.3 as salesperson_sales_value_fp_rate,0.5 as salesperson_profit_fp_rate,0 as service_user_sales_value_fp_rate,0 as service_user_profit_fp_rate
+union all   select '118183' as customer_no,'' as service_user_work_no,'' as service_user_name,'81118962' as work_no,'陈威仁' as sales_name,'是' as is_part_time_service_manager,0.3 as salesperson_sales_value_fp_rate,0.5 as salesperson_profit_fp_rate,0 as service_user_sales_value_fp_rate,0 as service_user_profit_fp_rate
+union all   select '125137' as customer_no,'' as service_user_work_no,'' as service_user_name,'81043405' as work_no,'魏桓' as sales_name,'是' as is_part_time_service_manager,0.3 as salesperson_sales_value_fp_rate,0.5 as salesperson_profit_fp_rate,0 as service_user_sales_value_fp_rate,0 as service_user_profit_fp_rate
+union all   select '123923' as customer_no,'' as service_user_work_no,'' as service_user_name,'LL000003' as work_no,'彭先檩（龙岩）' as sales_name,'是' as is_part_time_service_manager,0.3 as salesperson_sales_value_fp_rate,0.5 as salesperson_profit_fp_rate,0 as service_user_sales_value_fp_rate,0 as service_user_profit_fp_rate
+union all   select '120836' as customer_no,'' as service_user_work_no,'' as service_user_name,'81042140' as work_no,'林志雄' as sales_name,'是' as is_part_time_service_manager,0.3 as salesperson_sales_value_fp_rate,0.5 as salesperson_profit_fp_rate,0 as service_user_sales_value_fp_rate,0 as service_user_profit_fp_rate
+union all   select '123034' as customer_no,'' as service_user_work_no,'' as service_user_name,'90000001' as work_no,'龙岩B' as sales_name,'是' as is_part_time_service_manager,0.3 as salesperson_sales_value_fp_rate,0.5 as salesperson_profit_fp_rate,0 as service_user_sales_value_fp_rate,0 as service_user_profit_fp_rate
+union all   select '123859' as customer_no,'' as service_user_work_no,'' as service_user_name,'81043405' as work_no,'魏桓' as sales_name,'是' as is_part_time_service_manager,0.3 as salesperson_sales_value_fp_rate,0.5 as salesperson_profit_fp_rate,0 as service_user_sales_value_fp_rate,0 as service_user_profit_fp_rate
+union all   select '123650' as customer_no,'' as service_user_work_no,'' as service_user_name,'81062977' as work_no,'邱维海' as sales_name,'是' as is_part_time_service_manager,0.3 as salesperson_sales_value_fp_rate,0.5 as salesperson_profit_fp_rate,0 as service_user_sales_value_fp_rate,0 as service_user_profit_fp_rate
+union all   select '124555' as customer_no,'' as service_user_work_no,'' as service_user_name,'90000001' as work_no,'龙岩B' as sales_name,'是' as is_part_time_service_manager,0.3 as salesperson_sales_value_fp_rate,0.5 as salesperson_profit_fp_rate,0 as service_user_sales_value_fp_rate,0 as service_user_profit_fp_rate
+union all   select '124641' as customer_no,'' as service_user_work_no,'' as service_user_name,'81062977' as work_no,'邱维海' as sales_name,'是' as is_part_time_service_manager,0.3 as salesperson_sales_value_fp_rate,0.5 as salesperson_profit_fp_rate,0 as service_user_sales_value_fp_rate,0 as service_user_profit_fp_rate
+union all   select '104318' as customer_no,'' as service_user_work_no,'' as service_user_name,'44555151' as work_no,'泉州B' as sales_name,'是' as is_part_time_service_manager,0.3 as salesperson_sales_value_fp_rate,0.5 as salesperson_profit_fp_rate,0 as service_user_sales_value_fp_rate,0 as service_user_profit_fp_rate
+union all   select '104085' as customer_no,'' as service_user_work_no,'' as service_user_name,'44555151' as work_no,'泉州B' as sales_name,'是' as is_part_time_service_manager,0.3 as salesperson_sales_value_fp_rate,0.5 as salesperson_profit_fp_rate,0 as service_user_sales_value_fp_rate,0 as service_user_profit_fp_rate
+union all   select '120781' as customer_no,'' as service_user_work_no,'' as service_user_name,'10000001' as work_no,'彭先檩（泉州）' as sales_name,'是' as is_part_time_service_manager,0.3 as salesperson_sales_value_fp_rate,0.5 as salesperson_profit_fp_rate,0 as service_user_sales_value_fp_rate,0 as service_user_profit_fp_rate
+union all   select '118744' as customer_no,'' as service_user_work_no,'' as service_user_name,'81094607' as work_no,'林志高' as sales_name,'是' as is_part_time_service_manager,0.3 as salesperson_sales_value_fp_rate,0.5 as salesperson_profit_fp_rate,0 as service_user_sales_value_fp_rate,0 as service_user_profit_fp_rate
+union all   select '106433' as customer_no,'' as service_user_work_no,'' as service_user_name,'44555151' as work_no,'泉州B' as sales_name,'是' as is_part_time_service_manager,0.3 as salesperson_sales_value_fp_rate,0.5 as salesperson_profit_fp_rate,0 as service_user_sales_value_fp_rate,0 as service_user_profit_fp_rate
+union all   select '115051' as customer_no,'' as service_user_work_no,'' as service_user_name,'81129344' as work_no,'洪少灵' as sales_name,'是' as is_part_time_service_manager,0.3 as salesperson_sales_value_fp_rate,0.5 as salesperson_profit_fp_rate,0 as service_user_sales_value_fp_rate,0 as service_user_profit_fp_rate
+union all   select '108283' as customer_no,'' as service_user_work_no,'' as service_user_name,'81094607' as work_no,'林志高' as sales_name,'是' as is_part_time_service_manager,0.3 as salesperson_sales_value_fp_rate,0.5 as salesperson_profit_fp_rate,0 as service_user_sales_value_fp_rate,0 as service_user_profit_fp_rate
+union all   select '119897' as customer_no,'' as service_user_work_no,'' as service_user_name,'10000001' as work_no,'彭先檩（泉州）' as sales_name,'是' as is_part_time_service_manager,0.3 as salesperson_sales_value_fp_rate,0.5 as salesperson_profit_fp_rate,0 as service_user_sales_value_fp_rate,0 as service_user_profit_fp_rate
+union all   select '109722' as customer_no,'' as service_user_work_no,'' as service_user_name,'81094607' as work_no,'林志高' as sales_name,'是' as is_part_time_service_manager,0.3 as salesperson_sales_value_fp_rate,0.5 as salesperson_profit_fp_rate,0 as service_user_sales_value_fp_rate,0 as service_user_profit_fp_rate
+union all   select '114516' as customer_no,'' as service_user_work_no,'' as service_user_name,'80969261' as work_no,'黄诗偶' as sales_name,'是' as is_part_time_service_manager,0.3 as salesperson_sales_value_fp_rate,0.5 as salesperson_profit_fp_rate,0 as service_user_sales_value_fp_rate,0 as service_user_profit_fp_rate
+union all   select '120365' as customer_no,'' as service_user_work_no,'' as service_user_name,'81094607' as work_no,'林志高' as sales_name,'是' as is_part_time_service_manager,0.3 as salesperson_sales_value_fp_rate,0.5 as salesperson_profit_fp_rate,0 as service_user_sales_value_fp_rate,0 as service_user_profit_fp_rate
+union all   select '119210' as customer_no,'' as service_user_work_no,'' as service_user_name,'81094607' as work_no,'林志高' as sales_name,'是' as is_part_time_service_manager,0.3 as salesperson_sales_value_fp_rate,0.5 as salesperson_profit_fp_rate,0 as service_user_sales_value_fp_rate,0 as service_user_profit_fp_rate
+union all   select '119168' as customer_no,'' as service_user_work_no,'' as service_user_name,'81094607' as work_no,'林志高' as sales_name,'是' as is_part_time_service_manager,0.3 as salesperson_sales_value_fp_rate,0.5 as salesperson_profit_fp_rate,0 as service_user_sales_value_fp_rate,0 as service_user_profit_fp_rate
+union all   select '119519' as customer_no,'' as service_user_work_no,'' as service_user_name,'81094607' as work_no,'林志高' as sales_name,'是' as is_part_time_service_manager,0.3 as salesperson_sales_value_fp_rate,0.5 as salesperson_profit_fp_rate,0 as service_user_sales_value_fp_rate,0 as service_user_profit_fp_rate
+union all   select '122555' as customer_no,'' as service_user_work_no,'' as service_user_name,'81094607' as work_no,'林志高' as sales_name,'是' as is_part_time_service_manager,0.3 as salesperson_sales_value_fp_rate,0.5 as salesperson_profit_fp_rate,0 as service_user_sales_value_fp_rate,0 as service_user_profit_fp_rate
+union all   select '121507' as customer_no,'' as service_user_work_no,'' as service_user_name,'81094607' as work_no,'林志高' as sales_name,'是' as is_part_time_service_manager,0.3 as salesperson_sales_value_fp_rate,0.5 as salesperson_profit_fp_rate,0 as service_user_sales_value_fp_rate,0 as service_user_profit_fp_rate
+union all   select '122269' as customer_no,'' as service_user_work_no,'' as service_user_name,'10000001' as work_no,'彭先檩（泉州）' as sales_name,'是' as is_part_time_service_manager,0.3 as salesperson_sales_value_fp_rate,0.5 as salesperson_profit_fp_rate,0 as service_user_sales_value_fp_rate,0 as service_user_profit_fp_rate
+union all   select '123222' as customer_no,'' as service_user_work_no,'' as service_user_name,'10000001' as work_no,'彭先檩（泉州）' as sales_name,'是' as is_part_time_service_manager,0.3 as salesperson_sales_value_fp_rate,0.5 as salesperson_profit_fp_rate,0 as service_user_sales_value_fp_rate,0 as service_user_profit_fp_rate
+union all   select '123262' as customer_no,'' as service_user_work_no,'' as service_user_name,'10000001' as work_no,'彭先檩（泉州）' as sales_name,'是' as is_part_time_service_manager,0.3 as salesperson_sales_value_fp_rate,0.5 as salesperson_profit_fp_rate,0 as service_user_sales_value_fp_rate,0 as service_user_profit_fp_rate
+union all   select '123257' as customer_no,'' as service_user_work_no,'' as service_user_name,'10000001' as work_no,'彭先檩（泉州）' as sales_name,'是' as is_part_time_service_manager,0.3 as salesperson_sales_value_fp_rate,0.5 as salesperson_profit_fp_rate,0 as service_user_sales_value_fp_rate,0 as service_user_profit_fp_rate
+union all   select '123242' as customer_no,'' as service_user_work_no,'' as service_user_name,'10000001' as work_no,'彭先檩（泉州）' as sales_name,'是' as is_part_time_service_manager,0.3 as salesperson_sales_value_fp_rate,0.5 as salesperson_profit_fp_rate,0 as service_user_sales_value_fp_rate,0 as service_user_profit_fp_rate
+union all   select '123247' as customer_no,'' as service_user_work_no,'' as service_user_name,'10000001' as work_no,'彭先檩（泉州）' as sales_name,'是' as is_part_time_service_manager,0.3 as salesperson_sales_value_fp_rate,0.5 as salesperson_profit_fp_rate,0 as service_user_sales_value_fp_rate,0 as service_user_profit_fp_rate
+union all   select '123253' as customer_no,'' as service_user_work_no,'' as service_user_name,'10000001' as work_no,'彭先檩（泉州）' as sales_name,'是' as is_part_time_service_manager,0.3 as salesperson_sales_value_fp_rate,0.5 as salesperson_profit_fp_rate,0 as service_user_sales_value_fp_rate,0 as service_user_profit_fp_rate
+union all   select '124602' as customer_no,'' as service_user_work_no,'' as service_user_name,'10000001' as work_no,'彭先檩（泉州）' as sales_name,'是' as is_part_time_service_manager,0.3 as salesperson_sales_value_fp_rate,0.5 as salesperson_profit_fp_rate,0 as service_user_sales_value_fp_rate,0 as service_user_profit_fp_rate
+union all   select '115205' as customer_no,'' as service_user_work_no,'' as service_user_name,'81088296' as work_no,'陈惠燕' as sales_name,'是' as is_part_time_service_manager,0.3 as salesperson_sales_value_fp_rate,0.5 as salesperson_profit_fp_rate,0 as service_user_sales_value_fp_rate,0 as service_user_profit_fp_rate
+union all   select '115643' as customer_no,'' as service_user_work_no,'' as service_user_name,'81093307' as work_no,'黄少伟' as sales_name,'是' as is_part_time_service_manager,0.3 as salesperson_sales_value_fp_rate,0.5 as salesperson_profit_fp_rate,0 as service_user_sales_value_fp_rate,0 as service_user_profit_fp_rate
+union all   select '120459' as customer_no,'' as service_user_work_no,'' as service_user_name,'XM000001' as work_no,'彭东京' as sales_name,'是' as is_part_time_service_manager,0.3 as salesperson_sales_value_fp_rate,0.5 as salesperson_profit_fp_rate,0 as service_user_sales_value_fp_rate,0 as service_user_profit_fp_rate
+union all   select '121206' as customer_no,'' as service_user_work_no,'' as service_user_name,'XM000001' as work_no,'彭东京' as sales_name,'是' as is_part_time_service_manager,0.3 as salesperson_sales_value_fp_rate,0.5 as salesperson_profit_fp_rate,0 as service_user_sales_value_fp_rate,0 as service_user_profit_fp_rate
+union all   select '102755' as customer_no,'' as service_user_work_no,'' as service_user_name,'10000002' as work_no,'彭先檩（厦门）' as sales_name,'是' as is_part_time_service_manager,0.3 as salesperson_sales_value_fp_rate,0.5 as salesperson_profit_fp_rate,0 as service_user_sales_value_fp_rate,0 as service_user_profit_fp_rate
+union all   select '103175' as customer_no,'' as service_user_work_no,'' as service_user_name,'10000002' as work_no,'彭先檩（厦门）' as sales_name,'是' as is_part_time_service_manager,0.3 as salesperson_sales_value_fp_rate,0.5 as salesperson_profit_fp_rate,0 as service_user_sales_value_fp_rate,0 as service_user_profit_fp_rate
+union all   select '103868' as customer_no,'' as service_user_work_no,'' as service_user_name,'10000002' as work_no,'彭先檩（厦门）' as sales_name,'是' as is_part_time_service_manager,0.3 as salesperson_sales_value_fp_rate,0.5 as salesperson_profit_fp_rate,0 as service_user_sales_value_fp_rate,0 as service_user_profit_fp_rate
+union all   select '103874' as customer_no,'' as service_user_work_no,'' as service_user_name,'10000002' as work_no,'彭先檩（厦门）' as sales_name,'是' as is_part_time_service_manager,0.3 as salesperson_sales_value_fp_rate,0.5 as salesperson_profit_fp_rate,0 as service_user_sales_value_fp_rate,0 as service_user_profit_fp_rate
+union all   select '103887' as customer_no,'' as service_user_work_no,'' as service_user_name,'10000002' as work_no,'彭先檩（厦门）' as sales_name,'是' as is_part_time_service_manager,0.3 as salesperson_sales_value_fp_rate,0.5 as salesperson_profit_fp_rate,0 as service_user_sales_value_fp_rate,0 as service_user_profit_fp_rate
+union all   select '103898' as customer_no,'' as service_user_work_no,'' as service_user_name,'10000002' as work_no,'彭先檩（厦门）' as sales_name,'是' as is_part_time_service_manager,0.3 as salesperson_sales_value_fp_rate,0.5 as salesperson_profit_fp_rate,0 as service_user_sales_value_fp_rate,0 as service_user_profit_fp_rate
+union all   select '103908' as customer_no,'' as service_user_work_no,'' as service_user_name,'10000002' as work_no,'彭先檩（厦门）' as sales_name,'是' as is_part_time_service_manager,0.3 as salesperson_sales_value_fp_rate,0.5 as salesperson_profit_fp_rate,0 as service_user_sales_value_fp_rate,0 as service_user_profit_fp_rate
+union all   select '103926' as customer_no,'' as service_user_work_no,'' as service_user_name,'10000002' as work_no,'彭先檩（厦门）' as sales_name,'是' as is_part_time_service_manager,0.3 as salesperson_sales_value_fp_rate,0.5 as salesperson_profit_fp_rate,0 as service_user_sales_value_fp_rate,0 as service_user_profit_fp_rate
+union all   select '103927' as customer_no,'' as service_user_work_no,'' as service_user_name,'10000002' as work_no,'彭先檩（厦门）' as sales_name,'是' as is_part_time_service_manager,0.3 as salesperson_sales_value_fp_rate,0.5 as salesperson_profit_fp_rate,0 as service_user_sales_value_fp_rate,0 as service_user_profit_fp_rate
+union all   select '104460' as customer_no,'' as service_user_work_no,'' as service_user_name,'10000002' as work_no,'彭先檩（厦门）' as sales_name,'是' as is_part_time_service_manager,0.3 as salesperson_sales_value_fp_rate,0.5 as salesperson_profit_fp_rate,0 as service_user_sales_value_fp_rate,0 as service_user_profit_fp_rate
+union all   select '109000' as customer_no,'' as service_user_work_no,'' as service_user_name,'80989132' as work_no,'姚市敏' as sales_name,'是' as is_part_time_service_manager,0.3 as salesperson_sales_value_fp_rate,0.5 as salesperson_profit_fp_rate,0 as service_user_sales_value_fp_rate,0 as service_user_profit_fp_rate
+union all   select '106563' as customer_no,'' as service_user_work_no,'' as service_user_name,'10010007' as work_no,'厦门B' as sales_name,'是' as is_part_time_service_manager,0.3 as salesperson_sales_value_fp_rate,0.5 as salesperson_profit_fp_rate,0 as service_user_sales_value_fp_rate,0 as service_user_profit_fp_rate
+union all   select '114522' as customer_no,'' as service_user_work_no,'' as service_user_name,'10000002' as work_no,'彭先檩（厦门）' as sales_name,'是' as is_part_time_service_manager,0.3 as salesperson_sales_value_fp_rate,0.5 as salesperson_profit_fp_rate,0 as service_user_sales_value_fp_rate,0 as service_user_profit_fp_rate
+union all   select '115431' as customer_no,'' as service_user_work_no,'' as service_user_name,'10000002' as work_no,'彭先檩（厦门）' as sales_name,'是' as is_part_time_service_manager,0.3 as salesperson_sales_value_fp_rate,0.5 as salesperson_profit_fp_rate,0 as service_user_sales_value_fp_rate,0 as service_user_profit_fp_rate
+union all   select '118504' as customer_no,'' as service_user_work_no,'' as service_user_name,'10000002' as work_no,'彭先檩（厦门）' as sales_name,'是' as is_part_time_service_manager,0.3 as salesperson_sales_value_fp_rate,0.5 as salesperson_profit_fp_rate,0 as service_user_sales_value_fp_rate,0 as service_user_profit_fp_rate
+union all   select '120554' as customer_no,'' as service_user_work_no,'' as service_user_name,'XN000001' as work_no,'彭先檩（漳州）' as sales_name,'是' as is_part_time_service_manager,0.3 as salesperson_sales_value_fp_rate,0.5 as salesperson_profit_fp_rate,0 as service_user_sales_value_fp_rate,0 as service_user_profit_fp_rate
+union all   select '113281' as customer_no,'' as service_user_work_no,'' as service_user_name,'LL000002' as work_no,'彭先檩（宁德）' as sales_name,'是' as is_part_time_service_manager,0.3 as salesperson_sales_value_fp_rate,0.5 as salesperson_profit_fp_rate,0 as service_user_sales_value_fp_rate,0 as service_user_profit_fp_rate
+union all   select '115935' as customer_no,'' as service_user_work_no,'' as service_user_name,'81041732' as work_no,'符逢芬' as sales_name,'是' as is_part_time_service_manager,0.3 as salesperson_sales_value_fp_rate,0.5 as salesperson_profit_fp_rate,0 as service_user_sales_value_fp_rate,0 as service_user_profit_fp_rate
+union all   select '118602' as customer_no,'' as service_user_work_no,'' as service_user_name,'80595641' as work_no,'王权威' as sales_name,'是' as is_part_time_service_manager,0.3 as salesperson_sales_value_fp_rate,0.5 as salesperson_profit_fp_rate,0 as service_user_sales_value_fp_rate,0 as service_user_profit_fp_rate
+union all   select '118748' as customer_no,'' as service_user_work_no,'' as service_user_name,'80595641' as work_no,'王权威' as sales_name,'是' as is_part_time_service_manager,0.3 as salesperson_sales_value_fp_rate,0.5 as salesperson_profit_fp_rate,0 as service_user_sales_value_fp_rate,0 as service_user_profit_fp_rate
+union all   select '119990' as customer_no,'' as service_user_work_no,'' as service_user_name,'81055537' as work_no,'林锋' as sales_name,'是' as is_part_time_service_manager,0.3 as salesperson_sales_value_fp_rate,0.5 as salesperson_profit_fp_rate,0 as service_user_sales_value_fp_rate,0 as service_user_profit_fp_rate
+union all   select '125677' as customer_no,'' as service_user_work_no,'' as service_user_name,'LL000002' as work_no,'彭先檩（宁德）' as sales_name,'是' as is_part_time_service_manager,0.3 as salesperson_sales_value_fp_rate,0.5 as salesperson_profit_fp_rate,0 as service_user_sales_value_fp_rate,0 as service_user_profit_fp_rate
+union all   select '110872' as customer_no,'' as service_user_work_no,'' as service_user_name,'80938757' as work_no,'周丽' as sales_name,'是' as is_part_time_service_manager,0.3 as salesperson_sales_value_fp_rate,0.5 as salesperson_profit_fp_rate,0 as service_user_sales_value_fp_rate,0 as service_user_profit_fp_rate
+union all   select '118825' as customer_no,'' as service_user_work_no,'' as service_user_name,'80938757' as work_no,'周丽' as sales_name,'是' as is_part_time_service_manager,0.3 as salesperson_sales_value_fp_rate,0.5 as salesperson_profit_fp_rate,0 as service_user_sales_value_fp_rate,0 as service_user_profit_fp_rate
+union all   select '105164' as customer_no,'' as service_user_work_no,'' as service_user_name,'80991769' as work_no,'郑宇祥' as sales_name,'是' as is_part_time_service_manager,0.3 as salesperson_sales_value_fp_rate,0.5 as salesperson_profit_fp_rate,0 as service_user_sales_value_fp_rate,0 as service_user_profit_fp_rate
+union all   select '105165' as customer_no,'' as service_user_work_no,'' as service_user_name,'80991769' as work_no,'郑宇祥' as sales_name,'是' as is_part_time_service_manager,0.3 as salesperson_sales_value_fp_rate,0.5 as salesperson_profit_fp_rate,0 as service_user_sales_value_fp_rate,0 as service_user_profit_fp_rate
+union all   select '119757' as customer_no,'' as service_user_work_no,'' as service_user_name,'80991769' as work_no,'郑宇祥' as sales_name,'是' as is_part_time_service_manager,0.3 as salesperson_sales_value_fp_rate,0.5 as salesperson_profit_fp_rate,0 as service_user_sales_value_fp_rate,0 as service_user_profit_fp_rate
+union all   select '111628' as customer_no,'' as service_user_work_no,'' as service_user_name,'80991769' as work_no,'郑宇祥' as sales_name,'是' as is_part_time_service_manager,0.3 as salesperson_sales_value_fp_rate,0.5 as salesperson_profit_fp_rate,0 as service_user_sales_value_fp_rate,0 as service_user_profit_fp_rate
+union all   select '111612' as customer_no,'' as service_user_work_no,'' as service_user_name,'80991769' as work_no,'郑宇祥' as sales_name,'是' as is_part_time_service_manager,0.3 as salesperson_sales_value_fp_rate,0.5 as salesperson_profit_fp_rate,0 as service_user_sales_value_fp_rate,0 as service_user_profit_fp_rate
+union all   select '114289' as customer_no,'' as service_user_work_no,'' as service_user_name,'80991769' as work_no,'郑宇祥' as sales_name,'是' as is_part_time_service_manager,0.3 as salesperson_sales_value_fp_rate,0.5 as salesperson_profit_fp_rate,0 as service_user_sales_value_fp_rate,0 as service_user_profit_fp_rate
+union all   select '117396' as customer_no,'' as service_user_work_no,'' as service_user_name,'80991769' as work_no,'郑宇祥' as sales_name,'是' as is_part_time_service_manager,0.3 as salesperson_sales_value_fp_rate,0.5 as salesperson_profit_fp_rate,0 as service_user_sales_value_fp_rate,0 as service_user_profit_fp_rate
+union all   select '108162' as customer_no,'' as service_user_work_no,'' as service_user_name,'81043023' as work_no,'邓清兵' as sales_name,'是' as is_part_time_service_manager,0.3 as salesperson_sales_value_fp_rate,0.5 as salesperson_profit_fp_rate,0 as service_user_sales_value_fp_rate,0 as service_user_profit_fp_rate
+union all   select '115829' as customer_no,'' as service_user_work_no,'' as service_user_name,'80751663' as work_no,'肖秀华' as sales_name,'是' as is_part_time_service_manager,0.3 as salesperson_sales_value_fp_rate,0.5 as salesperson_profit_fp_rate,0 as service_user_sales_value_fp_rate,0 as service_user_profit_fp_rate
+union all   select '108180' as customer_no,'' as service_user_work_no,'' as service_user_name,'80751663' as work_no,'肖秀华' as sales_name,'是' as is_part_time_service_manager,0.3 as salesperson_sales_value_fp_rate,0.5 as salesperson_profit_fp_rate,0 as service_user_sales_value_fp_rate,0 as service_user_profit_fp_rate
+union all   select '108152' as customer_no,'' as service_user_work_no,'' as service_user_name,'80751663' as work_no,'肖秀华' as sales_name,'是' as is_part_time_service_manager,0.3 as salesperson_sales_value_fp_rate,0.5 as salesperson_profit_fp_rate,0 as service_user_sales_value_fp_rate,0 as service_user_profit_fp_rate
+union all   select '116445' as customer_no,'' as service_user_work_no,'' as service_user_name,'80751663' as work_no,'肖秀华' as sales_name,'是' as is_part_time_service_manager,0.3 as salesperson_sales_value_fp_rate,0.5 as salesperson_profit_fp_rate,0 as service_user_sales_value_fp_rate,0 as service_user_profit_fp_rate
+union all   select '120458' as customer_no,'' as service_user_work_no,'' as service_user_name,'80751663' as work_no,'肖秀华' as sales_name,'是' as is_part_time_service_manager,0.3 as salesperson_sales_value_fp_rate,0.5 as salesperson_profit_fp_rate,0 as service_user_sales_value_fp_rate,0 as service_user_profit_fp_rate
+union all   select '123032' as customer_no,'' as service_user_work_no,'' as service_user_name,'80751663' as work_no,'肖秀华' as sales_name,'是' as is_part_time_service_manager,0.3 as salesperson_sales_value_fp_rate,0.5 as salesperson_profit_fp_rate,0 as service_user_sales_value_fp_rate,0 as service_user_profit_fp_rate
+union all   select '124481' as customer_no,'' as service_user_work_no,'' as service_user_name,'80751663' as work_no,'肖秀华' as sales_name,'是' as is_part_time_service_manager,0.3 as salesperson_sales_value_fp_rate,0.5 as salesperson_profit_fp_rate,0 as service_user_sales_value_fp_rate,0 as service_user_profit_fp_rate
+union all   select '125355' as customer_no,'' as service_user_work_no,'' as service_user_name,'80751663' as work_no,'肖秀华' as sales_name,'是' as is_part_time_service_manager,0.3 as salesperson_sales_value_fp_rate,0.5 as salesperson_profit_fp_rate,0 as service_user_sales_value_fp_rate,0 as service_user_profit_fp_rate
+union all   select '111331' as customer_no,'' as service_user_work_no,'' as service_user_name,'81051600' as work_no,'吴玉萍' as sales_name,'是' as is_part_time_service_manager,0.3 as salesperson_sales_value_fp_rate,0.5 as salesperson_profit_fp_rate,0 as service_user_sales_value_fp_rate,0 as service_user_profit_fp_rate
+union all   select '110863' as customer_no,'' as service_user_work_no,'' as service_user_name,'81051600' as work_no,'吴玉萍' as sales_name,'是' as is_part_time_service_manager,0.3 as salesperson_sales_value_fp_rate,0.5 as salesperson_profit_fp_rate,0 as service_user_sales_value_fp_rate,0 as service_user_profit_fp_rate
+union all   select '114667' as customer_no,'' as service_user_work_no,'' as service_user_name,'81051600' as work_no,'吴玉萍' as sales_name,'是' as is_part_time_service_manager,0.3 as salesperson_sales_value_fp_rate,0.5 as salesperson_profit_fp_rate,0 as service_user_sales_value_fp_rate,0 as service_user_profit_fp_rate
+union all   select '108267' as customer_no,'' as service_user_work_no,'' as service_user_name,'81051600' as work_no,'吴玉萍' as sales_name,'是' as is_part_time_service_manager,0.3 as salesperson_sales_value_fp_rate,0.5 as salesperson_profit_fp_rate,0 as service_user_sales_value_fp_rate,0 as service_user_profit_fp_rate
+union all   select '111298' as customer_no,'' as service_user_work_no,'' as service_user_name,'81051600' as work_no,'吴玉萍' as sales_name,'是' as is_part_time_service_manager,0.3 as salesperson_sales_value_fp_rate,0.5 as salesperson_profit_fp_rate,0 as service_user_sales_value_fp_rate,0 as service_user_profit_fp_rate
+union all   select '115476' as customer_no,'' as service_user_work_no,'' as service_user_name,'81051600' as work_no,'吴玉萍' as sales_name,'是' as is_part_time_service_manager,0.3 as salesperson_sales_value_fp_rate,0.5 as salesperson_profit_fp_rate,0 as service_user_sales_value_fp_rate,0 as service_user_profit_fp_rate
+union all   select '118914' as customer_no,'' as service_user_work_no,'' as service_user_name,'81006145' as work_no,'池万春' as sales_name,'是' as is_part_time_service_manager,0.3 as salesperson_sales_value_fp_rate,0.5 as salesperson_profit_fp_rate,0 as service_user_sales_value_fp_rate,0 as service_user_profit_fp_rate
+union all   select '111318' as customer_no,'' as service_user_work_no,'' as service_user_name,'81006145' as work_no,'池万春' as sales_name,'是' as is_part_time_service_manager,0.3 as salesperson_sales_value_fp_rate,0.5 as salesperson_profit_fp_rate,0 as service_user_sales_value_fp_rate,0 as service_user_profit_fp_rate
+union all   select '111336' as customer_no,'' as service_user_work_no,'' as service_user_name,'81006145' as work_no,'池万春' as sales_name,'是' as is_part_time_service_manager,0.3 as salesperson_sales_value_fp_rate,0.5 as salesperson_profit_fp_rate,0 as service_user_sales_value_fp_rate,0 as service_user_profit_fp_rate
+union all   select '112629' as customer_no,'' as service_user_work_no,'' as service_user_name,'81006145' as work_no,'池万春' as sales_name,'是' as is_part_time_service_manager,0.3 as salesperson_sales_value_fp_rate,0.5 as salesperson_profit_fp_rate,0 as service_user_sales_value_fp_rate,0 as service_user_profit_fp_rate
+union all   select '123623' as customer_no,'' as service_user_work_no,'' as service_user_name,'81122116' as work_no,'陈滨滨' as sales_name,'是' as is_part_time_service_manager,0 as salesperson_sales_value_fp_rate,0 as salesperson_profit_fp_rate,0 as service_user_sales_value_fp_rate,0 as service_user_profit_fp_rate
+union all   select '103096' as customer_no,'' as service_user_work_no,'' as service_user_name,'80927693' as work_no,'王玉花' as sales_name,'是' as is_part_time_service_manager,0.7 as salesperson_sales_value_fp_rate,0.5 as salesperson_profit_fp_rate,0 as service_user_sales_value_fp_rate,0 as service_user_profit_fp_rate
+union all   select '102534' as customer_no,'80980977' as service_user_work_no,'黄小红' as service_user_name,'80980977' as work_no,'黄小红' as sales_name,'是' as is_part_time_service_manager,0 as salesperson_sales_value_fp_rate,0 as salesperson_profit_fp_rate,0.3 as service_user_sales_value_fp_rate,0.5 as service_user_profit_fp_rate
+union all   select '102798' as customer_no,'80980977' as service_user_work_no,'黄小红' as service_user_name,'80980977' as work_no,'黄小红' as sales_name,'是' as is_part_time_service_manager,0 as salesperson_sales_value_fp_rate,0 as salesperson_profit_fp_rate,0.3 as service_user_sales_value_fp_rate,0.5 as service_user_profit_fp_rate
+union all   select '102806' as customer_no,'80980977' as service_user_work_no,'黄小红' as service_user_name,'80980977' as work_no,'黄小红' as sales_name,'是' as is_part_time_service_manager,0 as salesperson_sales_value_fp_rate,0 as salesperson_profit_fp_rate,0.3 as service_user_sales_value_fp_rate,0.5 as service_user_profit_fp_rate
+union all   select '103808' as customer_no,'80619984' as service_user_work_no,'翟敏' as service_user_name,'80619984' as work_no,'翟敏' as sales_name,'是' as is_part_time_service_manager,0 as salesperson_sales_value_fp_rate,0 as salesperson_profit_fp_rate,0.3 as service_user_sales_value_fp_rate,0.5 as service_user_profit_fp_rate
+union all   select '103945' as customer_no,'' as service_user_work_no,'' as service_user_name,'80083850' as work_no,'张辉' as sales_name,'否' as is_part_time_service_manager,1 as salesperson_sales_value_fp_rate,1 as salesperson_profit_fp_rate,0 as service_user_sales_value_fp_rate,0 as service_user_profit_fp_rate
+union all   select '104150' as customer_no,'80909562' as service_user_work_no,'陈乾' as service_user_name,'80909562' as work_no,'陈乾' as sales_name,'是' as is_part_time_service_manager,0 as salesperson_sales_value_fp_rate,0 as salesperson_profit_fp_rate,0.3 as service_user_sales_value_fp_rate,0.5 as service_user_profit_fp_rate
+union all   select '104414' as customer_no,'' as service_user_work_no,'' as service_user_name,'80083850' as work_no,'张辉' as sales_name,'否' as is_part_time_service_manager,1 as salesperson_sales_value_fp_rate,1 as salesperson_profit_fp_rate,0 as service_user_sales_value_fp_rate,0 as service_user_profit_fp_rate
+union all   select '105005' as customer_no,'' as service_user_work_no,'' as service_user_name,'80083850' as work_no,'张辉' as sales_name,'否' as is_part_time_service_manager,1 as salesperson_sales_value_fp_rate,1 as salesperson_profit_fp_rate,0 as service_user_sales_value_fp_rate,0 as service_user_profit_fp_rate
+union all   select '105024' as customer_no,'' as service_user_work_no,'' as service_user_name,'80083850' as work_no,'张辉' as sales_name,'否' as is_part_time_service_manager,1 as salesperson_sales_value_fp_rate,1 as salesperson_profit_fp_rate,0 as service_user_sales_value_fp_rate,0 as service_user_profit_fp_rate
+union all   select '105085' as customer_no,'' as service_user_work_no,'' as service_user_name,'80886777' as work_no,'张意' as sales_name,'否' as is_part_time_service_manager,1 as salesperson_sales_value_fp_rate,1 as salesperson_profit_fp_rate,0 as service_user_sales_value_fp_rate,0 as service_user_profit_fp_rate
+union all   select '105186' as customer_no,'80980977' as service_user_work_no,'黄小红' as service_user_name,'80980977' as work_no,'黄小红' as sales_name,'是' as is_part_time_service_manager,0 as salesperson_sales_value_fp_rate,0 as salesperson_profit_fp_rate,0.3 as service_user_sales_value_fp_rate,0.5 as service_user_profit_fp_rate
+union all   select '105247' as customer_no,'' as service_user_work_no,'' as service_user_name,'80902387' as work_no,'张秋菊' as sales_name,'否' as is_part_time_service_manager,1 as salesperson_sales_value_fp_rate,1 as salesperson_profit_fp_rate,0 as service_user_sales_value_fp_rate,0 as service_user_profit_fp_rate
+union all   select '105287' as customer_no,'80909562' as service_user_work_no,'陈乾' as service_user_name,'80909562' as work_no,'陈乾' as sales_name,'是' as is_part_time_service_manager,0 as salesperson_sales_value_fp_rate,0 as salesperson_profit_fp_rate,0.3 as service_user_sales_value_fp_rate,0.5 as service_user_profit_fp_rate
+union all   select '105480' as customer_no,'80909562' as service_user_work_no,'陈乾' as service_user_name,'80909562' as work_no,'陈乾' as sales_name,'是' as is_part_time_service_manager,0 as salesperson_sales_value_fp_rate,0 as salesperson_profit_fp_rate,0.3 as service_user_sales_value_fp_rate,0.5 as service_user_profit_fp_rate
+union all   select '105483' as customer_no,'80909562' as service_user_work_no,'陈乾' as service_user_name,'80909562' as work_no,'陈乾' as sales_name,'是' as is_part_time_service_manager,0 as salesperson_sales_value_fp_rate,0 as salesperson_profit_fp_rate,0.3 as service_user_sales_value_fp_rate,0.5 as service_user_profit_fp_rate
+union all   select '105505' as customer_no,'' as service_user_work_no,'' as service_user_name,'80895095' as work_no,'罗泽剑' as sales_name,'否' as is_part_time_service_manager,1 as salesperson_sales_value_fp_rate,1 as salesperson_profit_fp_rate,0 as service_user_sales_value_fp_rate,0 as service_user_profit_fp_rate
+union all   select '105521' as customer_no,'' as service_user_work_no,'' as service_user_name,'80902387' as work_no,'张秋菊' as sales_name,'否' as is_part_time_service_manager,1 as salesperson_sales_value_fp_rate,1 as salesperson_profit_fp_rate,0 as service_user_sales_value_fp_rate,0 as service_user_profit_fp_rate
+union all   select '105540' as customer_no,'80909562' as service_user_work_no,'陈乾' as service_user_name,'80909562' as work_no,'陈乾' as sales_name,'是' as is_part_time_service_manager,0 as salesperson_sales_value_fp_rate,0 as salesperson_profit_fp_rate,0.3 as service_user_sales_value_fp_rate,0.5 as service_user_profit_fp_rate
+union all   select '105569' as customer_no,'' as service_user_work_no,'' as service_user_name,'80902387' as work_no,'张秋菊' as sales_name,'否' as is_part_time_service_manager,1 as salesperson_sales_value_fp_rate,1 as salesperson_profit_fp_rate,0 as service_user_sales_value_fp_rate,0 as service_user_profit_fp_rate
+union all   select '105639' as customer_no,'' as service_user_work_no,'' as service_user_name,'80912842' as work_no,'刘悦' as sales_name,'否' as is_part_time_service_manager,1 as salesperson_sales_value_fp_rate,1 as salesperson_profit_fp_rate,0 as service_user_sales_value_fp_rate,0 as service_user_profit_fp_rate
+union all   select '105715' as customer_no,'' as service_user_work_no,'' as service_user_name,'80913082' as work_no,'袁明华' as sales_name,'否' as is_part_time_service_manager,1 as salesperson_sales_value_fp_rate,1 as salesperson_profit_fp_rate,0 as service_user_sales_value_fp_rate,0 as service_user_profit_fp_rate
+union all   select '105756' as customer_no,'' as service_user_work_no,'' as service_user_name,'80083850' as work_no,'张辉' as sales_name,'否' as is_part_time_service_manager,1 as salesperson_sales_value_fp_rate,1 as salesperson_profit_fp_rate,0 as service_user_sales_value_fp_rate,0 as service_user_profit_fp_rate
+union all   select '105768' as customer_no,'' as service_user_work_no,'' as service_user_name,'80927654' as work_no,'向亚聪' as sales_name,'否' as is_part_time_service_manager,1 as salesperson_sales_value_fp_rate,1 as salesperson_profit_fp_rate,0 as service_user_sales_value_fp_rate,0 as service_user_profit_fp_rate
+union all   select '105790' as customer_no,'' as service_user_work_no,'' as service_user_name,'80895095' as work_no,'罗泽剑' as sales_name,'否' as is_part_time_service_manager,1 as salesperson_sales_value_fp_rate,1 as salesperson_profit_fp_rate,0 as service_user_sales_value_fp_rate,0 as service_user_profit_fp_rate
+union all   select '105791' as customer_no,'80909562' as service_user_work_no,'陈乾' as service_user_name,'80909562' as work_no,'陈乾' as sales_name,'是' as is_part_time_service_manager,0 as salesperson_sales_value_fp_rate,0 as salesperson_profit_fp_rate,0.3 as service_user_sales_value_fp_rate,0.5 as service_user_profit_fp_rate
+union all   select '105802' as customer_no,'' as service_user_work_no,'' as service_user_name,'80895095' as work_no,'罗泽剑' as sales_name,'否' as is_part_time_service_manager,1 as salesperson_sales_value_fp_rate,1 as salesperson_profit_fp_rate,0 as service_user_sales_value_fp_rate,0 as service_user_profit_fp_rate
+union all   select '106095' as customer_no,'' as service_user_work_no,'' as service_user_name,'80927653' as work_no,'陈炳' as sales_name,'否' as is_part_time_service_manager,1 as salesperson_sales_value_fp_rate,1 as salesperson_profit_fp_rate,0 as service_user_sales_value_fp_rate,0 as service_user_profit_fp_rate
+union all   select '106266' as customer_no,'' as service_user_work_no,'' as service_user_name,'80930345' as work_no,'黄泰洋' as sales_name,'否' as is_part_time_service_manager,1 as salesperson_sales_value_fp_rate,1 as salesperson_profit_fp_rate,0 as service_user_sales_value_fp_rate,0 as service_user_profit_fp_rate
+union all   select '106300' as customer_no,'80909562' as service_user_work_no,'陈乾' as service_user_name,'80909562' as work_no,'陈乾' as sales_name,'是' as is_part_time_service_manager,0 as salesperson_sales_value_fp_rate,0 as salesperson_profit_fp_rate,0.3 as service_user_sales_value_fp_rate,0.5 as service_user_profit_fp_rate
+union all   select '106434' as customer_no,'' as service_user_work_no,'' as service_user_name,'80895095' as work_no,'罗泽剑' as sales_name,'否' as is_part_time_service_manager,1 as salesperson_sales_value_fp_rate,1 as salesperson_profit_fp_rate,0 as service_user_sales_value_fp_rate,0 as service_user_profit_fp_rate
+union all   select '106459' as customer_no,'80893394' as service_user_work_no,'徐文强' as service_user_name,'80893394' as work_no,'徐文强' as sales_name,'是' as is_part_time_service_manager,0 as salesperson_sales_value_fp_rate,0 as salesperson_profit_fp_rate,0.3 as service_user_sales_value_fp_rate,0.5 as service_user_profit_fp_rate
+union all   select '106524' as customer_no,'80909562' as service_user_work_no,'陈乾' as service_user_name,'80909562' as work_no,'陈乾' as sales_name,'是' as is_part_time_service_manager,0 as salesperson_sales_value_fp_rate,0 as salesperson_profit_fp_rate,0.3 as service_user_sales_value_fp_rate,0.5 as service_user_profit_fp_rate
+union all   select '106538' as customer_no,'80909562' as service_user_work_no,'陈乾' as service_user_name,'80909562' as work_no,'陈乾' as sales_name,'是' as is_part_time_service_manager,0 as salesperson_sales_value_fp_rate,0 as salesperson_profit_fp_rate,0.3 as service_user_sales_value_fp_rate,0.5 as service_user_profit_fp_rate
+union all   select '106558' as customer_no,'' as service_user_work_no,'' as service_user_name,'80930345' as work_no,'黄泰洋' as sales_name,'否' as is_part_time_service_manager,1 as salesperson_sales_value_fp_rate,1 as salesperson_profit_fp_rate,0 as service_user_sales_value_fp_rate,0 as service_user_profit_fp_rate
+union all   select '106572' as customer_no,'' as service_user_work_no,'' as service_user_name,'80913082' as work_no,'袁明华' as sales_name,'否' as is_part_time_service_manager,1 as salesperson_sales_value_fp_rate,1 as salesperson_profit_fp_rate,0 as service_user_sales_value_fp_rate,0 as service_user_profit_fp_rate
+union all   select '106602' as customer_no,'' as service_user_work_no,'' as service_user_name,'80912842' as work_no,'刘悦' as sales_name,'否' as is_part_time_service_manager,1 as salesperson_sales_value_fp_rate,1 as salesperson_profit_fp_rate,0 as service_user_sales_value_fp_rate,0 as service_user_profit_fp_rate
+union all   select '106737' as customer_no,'' as service_user_work_no,'' as service_user_name,'80927654' as work_no,'向亚聪' as sales_name,'否' as is_part_time_service_manager,1 as salesperson_sales_value_fp_rate,1 as salesperson_profit_fp_rate,0 as service_user_sales_value_fp_rate,0 as service_user_profit_fp_rate
+union all   select '106898' as customer_no,'' as service_user_work_no,'' as service_user_name,'80901735' as work_no,'刘川龙' as sales_name,'否' as is_part_time_service_manager,1 as salesperson_sales_value_fp_rate,1 as salesperson_profit_fp_rate,0 as service_user_sales_value_fp_rate,0 as service_user_profit_fp_rate
+union all   select '106900' as customer_no,'80926168' as service_user_work_no,'张全伟' as service_user_name,'80926168' as work_no,'张全伟' as sales_name,'是' as is_part_time_service_manager,0 as salesperson_sales_value_fp_rate,0 as salesperson_profit_fp_rate,0.3 as service_user_sales_value_fp_rate,0.5 as service_user_profit_fp_rate
+union all   select '106910' as customer_no,'' as service_user_work_no,'' as service_user_name,'80929962' as work_no,'李宏方' as sales_name,'否' as is_part_time_service_manager,1 as salesperson_sales_value_fp_rate,1 as salesperson_profit_fp_rate,0 as service_user_sales_value_fp_rate,0 as service_user_profit_fp_rate
+union all   select '106925' as customer_no,'' as service_user_work_no,'' as service_user_name,'80927654' as work_no,'向亚聪' as sales_name,'否' as is_part_time_service_manager,1 as salesperson_sales_value_fp_rate,1 as salesperson_profit_fp_rate,0 as service_user_sales_value_fp_rate,0 as service_user_profit_fp_rate
+union all   select '107000' as customer_no,'' as service_user_work_no,'' as service_user_name,'80895095' as work_no,'罗泽剑' as sales_name,'否' as is_part_time_service_manager,1 as salesperson_sales_value_fp_rate,1 as salesperson_profit_fp_rate,0 as service_user_sales_value_fp_rate,0 as service_user_profit_fp_rate
+union all   select '107031' as customer_no,'' as service_user_work_no,'' as service_user_name,'80930345' as work_no,'黄泰洋' as sales_name,'否' as is_part_time_service_manager,1 as salesperson_sales_value_fp_rate,1 as salesperson_profit_fp_rate,0 as service_user_sales_value_fp_rate,0 as service_user_profit_fp_rate
+union all   select '107058' as customer_no,'' as service_user_work_no,'' as service_user_name,'80887610' as work_no,'杨佐' as sales_name,'否' as is_part_time_service_manager,1 as salesperson_sales_value_fp_rate,1 as salesperson_profit_fp_rate,0 as service_user_sales_value_fp_rate,0 as service_user_profit_fp_rate
+union all   select '107073' as customer_no,'' as service_user_work_no,'' as service_user_name,'80927654' as work_no,'向亚聪' as sales_name,'否' as is_part_time_service_manager,1 as salesperson_sales_value_fp_rate,1 as salesperson_profit_fp_rate,0 as service_user_sales_value_fp_rate,0 as service_user_profit_fp_rate
+union all   select '107150' as customer_no,'' as service_user_work_no,'' as service_user_name,'80927653' as work_no,'陈炳' as sales_name,'否' as is_part_time_service_manager,1 as salesperson_sales_value_fp_rate,1 as salesperson_profit_fp_rate,0 as service_user_sales_value_fp_rate,0 as service_user_profit_fp_rate
+union all   select '107242' as customer_no,'80926168' as service_user_work_no,'张全伟' as service_user_name,'80926168' as work_no,'张全伟' as sales_name,'是' as is_part_time_service_manager,0 as salesperson_sales_value_fp_rate,0 as salesperson_profit_fp_rate,0.3 as service_user_sales_value_fp_rate,0.5 as service_user_profit_fp_rate
+union all   select '107361' as customer_no,'80926168' as service_user_work_no,'张全伟' as service_user_name,'80926168' as work_no,'张全伟' as sales_name,'是' as is_part_time_service_manager,0 as salesperson_sales_value_fp_rate,0 as salesperson_profit_fp_rate,0.3 as service_user_sales_value_fp_rate,0.5 as service_user_profit_fp_rate
+union all   select '107435' as customer_no,'' as service_user_work_no,'' as service_user_name,'80956511' as work_no,'郭珍滟' as sales_name,'否' as is_part_time_service_manager,1 as salesperson_sales_value_fp_rate,1 as salesperson_profit_fp_rate,0 as service_user_sales_value_fp_rate,0 as service_user_profit_fp_rate
+union all   select '107438' as customer_no,'80909562' as service_user_work_no,'陈乾' as service_user_name,'80909562' as work_no,'陈乾' as sales_name,'是' as is_part_time_service_manager,0 as salesperson_sales_value_fp_rate,0 as salesperson_profit_fp_rate,0.3 as service_user_sales_value_fp_rate,0.5 as service_user_profit_fp_rate
+union all   select '107453' as customer_no,'' as service_user_work_no,'' as service_user_name,'80960714' as work_no,'李远军' as sales_name,'否' as is_part_time_service_manager,1 as salesperson_sales_value_fp_rate,1 as salesperson_profit_fp_rate,0 as service_user_sales_value_fp_rate,0 as service_user_profit_fp_rate
+union all   select '107461' as customer_no,'' as service_user_work_no,'' as service_user_name,'80960714' as work_no,'李远军' as sales_name,'否' as is_part_time_service_manager,1 as salesperson_sales_value_fp_rate,1 as salesperson_profit_fp_rate,0 as service_user_sales_value_fp_rate,0 as service_user_profit_fp_rate
+union all   select '107500' as customer_no,'' as service_user_work_no,'' as service_user_name,'80960714' as work_no,'李远军' as sales_name,'否' as is_part_time_service_manager,1 as salesperson_sales_value_fp_rate,1 as salesperson_profit_fp_rate,0 as service_user_sales_value_fp_rate,0 as service_user_profit_fp_rate
+union all   select '107532' as customer_no,'80926168' as service_user_work_no,'张全伟' as service_user_name,'80926168' as work_no,'张全伟' as sales_name,'是' as is_part_time_service_manager,0 as salesperson_sales_value_fp_rate,0 as salesperson_profit_fp_rate,0.3 as service_user_sales_value_fp_rate,0.5 as service_user_profit_fp_rate
+union all   select '107593' as customer_no,'' as service_user_work_no,'' as service_user_name,'80901735' as work_no,'刘川龙' as sales_name,'否' as is_part_time_service_manager,1 as salesperson_sales_value_fp_rate,1 as salesperson_profit_fp_rate,0 as service_user_sales_value_fp_rate,0 as service_user_profit_fp_rate
+union all   select '107655' as customer_no,'' as service_user_work_no,'' as service_user_name,'80913082' as work_no,'袁明华' as sales_name,'否' as is_part_time_service_manager,1 as salesperson_sales_value_fp_rate,1 as salesperson_profit_fp_rate,0 as service_user_sales_value_fp_rate,0 as service_user_profit_fp_rate
+union all   select '107674' as customer_no,'' as service_user_work_no,'' as service_user_name,'80912842' as work_no,'刘悦' as sales_name,'否' as is_part_time_service_manager,1 as salesperson_sales_value_fp_rate,1 as salesperson_profit_fp_rate,0 as service_user_sales_value_fp_rate,0 as service_user_profit_fp_rate
+union all   select '107685' as customer_no,'80893394' as service_user_work_no,'徐文强' as service_user_name,'80893394' as work_no,'徐文强' as sales_name,'是' as is_part_time_service_manager,0 as salesperson_sales_value_fp_rate,0 as salesperson_profit_fp_rate,0.3 as service_user_sales_value_fp_rate,0.5 as service_user_profit_fp_rate
+union all   select '107749' as customer_no,'80893394' as service_user_work_no,'徐文强' as service_user_name,'80893394' as work_no,'徐文强' as sales_name,'是' as is_part_time_service_manager,0 as salesperson_sales_value_fp_rate,0 as salesperson_profit_fp_rate,0.3 as service_user_sales_value_fp_rate,0.5 as service_user_profit_fp_rate
+union all   select '107827' as customer_no,'80926168' as service_user_work_no,'张全伟' as service_user_name,'80926168' as work_no,'张全伟' as sales_name,'是' as is_part_time_service_manager,0 as salesperson_sales_value_fp_rate,0 as salesperson_profit_fp_rate,0.3 as service_user_sales_value_fp_rate,0.5 as service_user_profit_fp_rate
+union all   select '107873' as customer_no,'80893394' as service_user_work_no,'徐文强' as service_user_name,'80893394' as work_no,'徐文强' as sales_name,'是' as is_part_time_service_manager,0 as salesperson_sales_value_fp_rate,0 as salesperson_profit_fp_rate,0.3 as service_user_sales_value_fp_rate,0.5 as service_user_profit_fp_rate
+union all   select '107995' as customer_no,'81030501' as service_user_work_no,'熊龙钦' as service_user_name,'81030501' as work_no,'熊龙钦' as sales_name,'是' as is_part_time_service_manager,0 as salesperson_sales_value_fp_rate,0 as salesperson_profit_fp_rate,0.3 as service_user_sales_value_fp_rate,0.5 as service_user_profit_fp_rate
+union all   select '108176' as customer_no,'' as service_user_work_no,'' as service_user_name,'80960714' as work_no,'李远军' as sales_name,'否' as is_part_time_service_manager,1 as salesperson_sales_value_fp_rate,1 as salesperson_profit_fp_rate,0 as service_user_sales_value_fp_rate,0 as service_user_profit_fp_rate
+union all   select '108185' as customer_no,'80909562' as service_user_work_no,'陈乾' as service_user_name,'80909562' as work_no,'陈乾' as sales_name,'是' as is_part_time_service_manager,0 as salesperson_sales_value_fp_rate,0 as salesperson_profit_fp_rate,0.3 as service_user_sales_value_fp_rate,0.5 as service_user_profit_fp_rate
+union all   select '108236' as customer_no,'80926168' as service_user_work_no,'张全伟' as service_user_name,'80926168' as work_no,'张全伟' as sales_name,'是' as is_part_time_service_manager,0 as salesperson_sales_value_fp_rate,0 as salesperson_profit_fp_rate,0.3 as service_user_sales_value_fp_rate,0.5 as service_user_profit_fp_rate
+union all   select '108417' as customer_no,'' as service_user_work_no,'' as service_user_name,'80930345' as work_no,'黄泰洋' as sales_name,'否' as is_part_time_service_manager,1 as salesperson_sales_value_fp_rate,1 as salesperson_profit_fp_rate,0 as service_user_sales_value_fp_rate,0 as service_user_profit_fp_rate
+union all   select '108480' as customer_no,'' as service_user_work_no,'' as service_user_name,'80941174' as work_no,'邓伟' as sales_name,'否' as is_part_time_service_manager,1 as salesperson_sales_value_fp_rate,1 as salesperson_profit_fp_rate,0 as service_user_sales_value_fp_rate,0 as service_user_profit_fp_rate
+union all   select '108777' as customer_no,'' as service_user_work_no,'' as service_user_name,'80941174' as work_no,'邓伟' as sales_name,'否' as is_part_time_service_manager,1 as salesperson_sales_value_fp_rate,1 as salesperson_profit_fp_rate,0 as service_user_sales_value_fp_rate,0 as service_user_profit_fp_rate
+union all   select '108795' as customer_no,'' as service_user_work_no,'' as service_user_name,'80960714' as work_no,'李远军' as sales_name,'否' as is_part_time_service_manager,1 as salesperson_sales_value_fp_rate,1 as salesperson_profit_fp_rate,0 as service_user_sales_value_fp_rate,0 as service_user_profit_fp_rate
+union all   select '108824' as customer_no,'' as service_user_work_no,'' as service_user_name,'80956511' as work_no,'郭珍滟' as sales_name,'否' as is_part_time_service_manager,1 as salesperson_sales_value_fp_rate,1 as salesperson_profit_fp_rate,0 as service_user_sales_value_fp_rate,0 as service_user_profit_fp_rate
+union all   select '108960' as customer_no,'' as service_user_work_no,'' as service_user_name,'80901735' as work_no,'刘川龙' as sales_name,'否' as is_part_time_service_manager,1 as salesperson_sales_value_fp_rate,1 as salesperson_profit_fp_rate,0 as service_user_sales_value_fp_rate,0 as service_user_profit_fp_rate
+union all   select '109349' as customer_no,'' as service_user_work_no,'' as service_user_name,'80927654' as work_no,'向亚聪' as sales_name,'否' as is_part_time_service_manager,1 as salesperson_sales_value_fp_rate,1 as salesperson_profit_fp_rate,0 as service_user_sales_value_fp_rate,0 as service_user_profit_fp_rate
+union all   select '109786' as customer_no,'' as service_user_work_no,'' as service_user_name,'80927654' as work_no,'向亚聪' as sales_name,'否' as is_part_time_service_manager,1 as salesperson_sales_value_fp_rate,1 as salesperson_profit_fp_rate,0 as service_user_sales_value_fp_rate,0 as service_user_profit_fp_rate
+union all   select '110242' as customer_no,'80926168' as service_user_work_no,'张全伟' as service_user_name,'80926168' as work_no,'张全伟' as sales_name,'是' as is_part_time_service_manager,0 as salesperson_sales_value_fp_rate,0 as salesperson_profit_fp_rate,0.3 as service_user_sales_value_fp_rate,0.5 as service_user_profit_fp_rate
+union all   select '110664' as customer_no,'' as service_user_work_no,'' as service_user_name,'80913082' as work_no,'袁明华' as sales_name,'否' as is_part_time_service_manager,1 as salesperson_sales_value_fp_rate,1 as salesperson_profit_fp_rate,0 as service_user_sales_value_fp_rate,0 as service_user_profit_fp_rate
+union all   select '110866' as customer_no,'' as service_user_work_no,'' as service_user_name,'80929962' as work_no,'李宏方' as sales_name,'否' as is_part_time_service_manager,1 as salesperson_sales_value_fp_rate,1 as salesperson_profit_fp_rate,0 as service_user_sales_value_fp_rate,0 as service_user_profit_fp_rate
+union all   select '111074' as customer_no,'' as service_user_work_no,'' as service_user_name,'80913082' as work_no,'袁明华' as sales_name,'否' as is_part_time_service_manager,1 as salesperson_sales_value_fp_rate,1 as salesperson_profit_fp_rate,0 as service_user_sales_value_fp_rate,0 as service_user_profit_fp_rate
+union all   select '111219' as customer_no,'' as service_user_work_no,'' as service_user_name,'80895095' as work_no,'罗泽剑' as sales_name,'否' as is_part_time_service_manager,1 as salesperson_sales_value_fp_rate,1 as salesperson_profit_fp_rate,0 as service_user_sales_value_fp_rate,0 as service_user_profit_fp_rate
+union all   select '111422' as customer_no,'' as service_user_work_no,'' as service_user_name,'80886777' as work_no,'张意' as sales_name,'否' as is_part_time_service_manager,1 as salesperson_sales_value_fp_rate,1 as salesperson_profit_fp_rate,0 as service_user_sales_value_fp_rate,0 as service_user_profit_fp_rate
+union all   select '111498' as customer_no,'' as service_user_work_no,'' as service_user_name,'80929962' as work_no,'李宏方' as sales_name,'否' as is_part_time_service_manager,1 as salesperson_sales_value_fp_rate,1 as salesperson_profit_fp_rate,0 as service_user_sales_value_fp_rate,0 as service_user_profit_fp_rate
+union all   select '111556' as customer_no,'' as service_user_work_no,'' as service_user_name,'80886777' as work_no,'张意' as sales_name,'否' as is_part_time_service_manager,1 as salesperson_sales_value_fp_rate,1 as salesperson_profit_fp_rate,0 as service_user_sales_value_fp_rate,0 as service_user_profit_fp_rate
+union all   select '111892' as customer_no,'80909562' as service_user_work_no,'陈乾' as service_user_name,'80909562' as work_no,'陈乾' as sales_name,'是' as is_part_time_service_manager,0 as salesperson_sales_value_fp_rate,0 as salesperson_profit_fp_rate,0.3 as service_user_sales_value_fp_rate,0.5 as service_user_profit_fp_rate
+union all   select '111896' as customer_no,'' as service_user_work_no,'' as service_user_name,'80930345' as work_no,'黄泰洋' as sales_name,'否' as is_part_time_service_manager,1 as salesperson_sales_value_fp_rate,1 as salesperson_profit_fp_rate,0 as service_user_sales_value_fp_rate,0 as service_user_profit_fp_rate
+union all   select '111912' as customer_no,'80926168' as service_user_work_no,'张全伟' as service_user_name,'80926168' as work_no,'张全伟' as sales_name,'是' as is_part_time_service_manager,0 as salesperson_sales_value_fp_rate,0 as salesperson_profit_fp_rate,0.3 as service_user_sales_value_fp_rate,0.5 as service_user_profit_fp_rate
+union all   select '111926' as customer_no,'80909562' as service_user_work_no,'陈乾' as service_user_name,'80909562' as work_no,'陈乾' as sales_name,'是' as is_part_time_service_manager,0 as salesperson_sales_value_fp_rate,0 as salesperson_profit_fp_rate,0.3 as service_user_sales_value_fp_rate,0.5 as service_user_profit_fp_rate
+union all   select '111932' as customer_no,'' as service_user_work_no,'' as service_user_name,'80956511' as work_no,'郭珍滟' as sales_name,'否' as is_part_time_service_manager,1 as salesperson_sales_value_fp_rate,1 as salesperson_profit_fp_rate,0 as service_user_sales_value_fp_rate,0 as service_user_profit_fp_rate
+union all   select '111942' as customer_no,'' as service_user_work_no,'' as service_user_name,'80956511' as work_no,'郭珍滟' as sales_name,'否' as is_part_time_service_manager,1 as salesperson_sales_value_fp_rate,1 as salesperson_profit_fp_rate,0 as service_user_sales_value_fp_rate,0 as service_user_profit_fp_rate
+union all   select '111956' as customer_no,'' as service_user_work_no,'' as service_user_name,'80956511' as work_no,'郭珍滟' as sales_name,'否' as is_part_time_service_manager,1 as salesperson_sales_value_fp_rate,1 as salesperson_profit_fp_rate,0 as service_user_sales_value_fp_rate,0 as service_user_profit_fp_rate
+union all   select '111960' as customer_no,'' as service_user_work_no,'' as service_user_name,'80956511' as work_no,'郭珍滟' as sales_name,'否' as is_part_time_service_manager,1 as salesperson_sales_value_fp_rate,1 as salesperson_profit_fp_rate,0 as service_user_sales_value_fp_rate,0 as service_user_profit_fp_rate
+union all   select '111984' as customer_no,'' as service_user_work_no,'' as service_user_name,'80956511' as work_no,'郭珍滟' as sales_name,'否' as is_part_time_service_manager,1 as salesperson_sales_value_fp_rate,1 as salesperson_profit_fp_rate,0 as service_user_sales_value_fp_rate,0 as service_user_profit_fp_rate
+union all   select '111987' as customer_no,'80893394' as service_user_work_no,'徐文强' as service_user_name,'80893394' as work_no,'徐文强' as sales_name,'是' as is_part_time_service_manager,0 as salesperson_sales_value_fp_rate,0 as salesperson_profit_fp_rate,0.3 as service_user_sales_value_fp_rate,0.5 as service_user_profit_fp_rate
+union all   select '112210' as customer_no,'80909562' as service_user_work_no,'陈乾' as service_user_name,'80909562' as work_no,'陈乾' as sales_name,'是' as is_part_time_service_manager,0 as salesperson_sales_value_fp_rate,0 as salesperson_profit_fp_rate,0.3 as service_user_sales_value_fp_rate,0.5 as service_user_profit_fp_rate
+union all   select '112731' as customer_no,'' as service_user_work_no,'' as service_user_name,'80878413' as work_no,'欧启' as sales_name,'否' as is_part_time_service_manager,1 as salesperson_sales_value_fp_rate,1 as salesperson_profit_fp_rate,0 as service_user_sales_value_fp_rate,0 as service_user_profit_fp_rate
+union all   select '112803' as customer_no,'' as service_user_work_no,'' as service_user_name,'81125246' as work_no,'邓金龙' as sales_name,'否' as is_part_time_service_manager,1 as salesperson_sales_value_fp_rate,1 as salesperson_profit_fp_rate,0 as service_user_sales_value_fp_rate,0 as service_user_profit_fp_rate
+union all   select '112813' as customer_no,'' as service_user_work_no,'' as service_user_name,'80083850' as work_no,'张辉' as sales_name,'否' as is_part_time_service_manager,1 as salesperson_sales_value_fp_rate,1 as salesperson_profit_fp_rate,0 as service_user_sales_value_fp_rate,0 as service_user_profit_fp_rate
+union all   select '112911' as customer_no,'' as service_user_work_no,'' as service_user_name,'80927654' as work_no,'向亚聪' as sales_name,'否' as is_part_time_service_manager,1 as salesperson_sales_value_fp_rate,1 as salesperson_profit_fp_rate,0 as service_user_sales_value_fp_rate,0 as service_user_profit_fp_rate
+union all   select '113063' as customer_no,'80893394' as service_user_work_no,'徐文强' as service_user_name,'80893394' as work_no,'徐文强' as sales_name,'是' as is_part_time_service_manager,0 as salesperson_sales_value_fp_rate,0 as salesperson_profit_fp_rate,0.3 as service_user_sales_value_fp_rate,0.5 as service_user_profit_fp_rate
+union all   select '113134' as customer_no,'' as service_user_work_no,'' as service_user_name,'80956511' as work_no,'郭珍滟' as sales_name,'否' as is_part_time_service_manager,1 as salesperson_sales_value_fp_rate,1 as salesperson_profit_fp_rate,0 as service_user_sales_value_fp_rate,0 as service_user_profit_fp_rate
+union all   select '113347' as customer_no,'80893394' as service_user_work_no,'徐文强' as service_user_name,'80893394' as work_no,'徐文强' as sales_name,'是' as is_part_time_service_manager,0 as salesperson_sales_value_fp_rate,0 as salesperson_profit_fp_rate,0.3 as service_user_sales_value_fp_rate,0.5 as service_user_profit_fp_rate
+union all   select '113564' as customer_no,'' as service_user_work_no,'' as service_user_name,'80913082' as work_no,'袁明华' as sales_name,'否' as is_part_time_service_manager,1 as salesperson_sales_value_fp_rate,1 as salesperson_profit_fp_rate,0 as service_user_sales_value_fp_rate,0 as service_user_profit_fp_rate
+union all   select '113571' as customer_no,'' as service_user_work_no,'' as service_user_name,'80913082' as work_no,'袁明华' as sales_name,'否' as is_part_time_service_manager,1 as salesperson_sales_value_fp_rate,1 as salesperson_profit_fp_rate,0 as service_user_sales_value_fp_rate,0 as service_user_profit_fp_rate
+union all   select '113590' as customer_no,'' as service_user_work_no,'' as service_user_name,'80913082' as work_no,'袁明华' as sales_name,'否' as is_part_time_service_manager,1 as salesperson_sales_value_fp_rate,1 as salesperson_profit_fp_rate,0 as service_user_sales_value_fp_rate,0 as service_user_profit_fp_rate
+union all   select '113643' as customer_no,'' as service_user_work_no,'' as service_user_name,'80927654' as work_no,'向亚聪' as sales_name,'否' as is_part_time_service_manager,1 as salesperson_sales_value_fp_rate,1 as salesperson_profit_fp_rate,0 as service_user_sales_value_fp_rate,0 as service_user_profit_fp_rate
+union all   select '113645' as customer_no,'' as service_user_work_no,'' as service_user_name,'80913082' as work_no,'袁明华' as sales_name,'否' as is_part_time_service_manager,1 as salesperson_sales_value_fp_rate,1 as salesperson_profit_fp_rate,0 as service_user_sales_value_fp_rate,0 as service_user_profit_fp_rate
+union all   select '113763' as customer_no,'80893394' as service_user_work_no,'徐文强' as service_user_name,'80893394' as work_no,'徐文强' as sales_name,'是' as is_part_time_service_manager,0 as salesperson_sales_value_fp_rate,0 as salesperson_profit_fp_rate,0.3 as service_user_sales_value_fp_rate,0.5 as service_user_profit_fp_rate
+union all   select '113920' as customer_no,'80893394' as service_user_work_no,'徐文强' as service_user_name,'80893394' as work_no,'徐文强' as sales_name,'是' as is_part_time_service_manager,0 as salesperson_sales_value_fp_rate,0 as salesperson_profit_fp_rate,0.3 as service_user_sales_value_fp_rate,0.5 as service_user_profit_fp_rate
+union all   select '114287' as customer_no,'' as service_user_work_no,'' as service_user_name,'80902387' as work_no,'张秋菊' as sales_name,'否' as is_part_time_service_manager,1 as salesperson_sales_value_fp_rate,1 as salesperson_profit_fp_rate,0 as service_user_sales_value_fp_rate,0 as service_user_profit_fp_rate
+union all   select '114354' as customer_no,'' as service_user_work_no,'' as service_user_name,'80913082' as work_no,'袁明华' as sales_name,'否' as is_part_time_service_manager,1 as salesperson_sales_value_fp_rate,1 as salesperson_profit_fp_rate,0 as service_user_sales_value_fp_rate,0 as service_user_profit_fp_rate
+union all   select '114469' as customer_no,'' as service_user_work_no,'' as service_user_name,'80930345' as work_no,'黄泰洋' as sales_name,'否' as is_part_time_service_manager,1 as salesperson_sales_value_fp_rate,1 as salesperson_profit_fp_rate,0 as service_user_sales_value_fp_rate,0 as service_user_profit_fp_rate
+union all   select '114704' as customer_no,'' as service_user_work_no,'' as service_user_name,'80902387' as work_no,'张秋菊' as sales_name,'否' as is_part_time_service_manager,1 as salesperson_sales_value_fp_rate,1 as salesperson_profit_fp_rate,0 as service_user_sales_value_fp_rate,0 as service_user_profit_fp_rate
+union all   select '114800' as customer_no,'' as service_user_work_no,'' as service_user_name,'80895095' as work_no,'罗泽剑' as sales_name,'否' as is_part_time_service_manager,1 as salesperson_sales_value_fp_rate,1 as salesperson_profit_fp_rate,0 as service_user_sales_value_fp_rate,0 as service_user_profit_fp_rate
+union all   select '114921' as customer_no,'' as service_user_work_no,'' as service_user_name,'80912842' as work_no,'刘悦' as sales_name,'否' as is_part_time_service_manager,1 as salesperson_sales_value_fp_rate,1 as salesperson_profit_fp_rate,0 as service_user_sales_value_fp_rate,0 as service_user_profit_fp_rate
+union all   select '114927' as customer_no,'' as service_user_work_no,'' as service_user_name,'80941174' as work_no,'邓伟' as sales_name,'否' as is_part_time_service_manager,1 as salesperson_sales_value_fp_rate,1 as salesperson_profit_fp_rate,0 as service_user_sales_value_fp_rate,0 as service_user_profit_fp_rate
+union all   select '115082' as customer_no,'' as service_user_work_no,'' as service_user_name,'80895095' as work_no,'罗泽剑' as sales_name,'否' as is_part_time_service_manager,1 as salesperson_sales_value_fp_rate,1 as salesperson_profit_fp_rate,0 as service_user_sales_value_fp_rate,0 as service_user_profit_fp_rate
+union all   select '115178' as customer_no,'' as service_user_work_no,'' as service_user_name,'80960714' as work_no,'李远军' as sales_name,'否' as is_part_time_service_manager,1 as salesperson_sales_value_fp_rate,1 as salesperson_profit_fp_rate,0 as service_user_sales_value_fp_rate,0 as service_user_profit_fp_rate
+union all   select '115206' as customer_no,'' as service_user_work_no,'' as service_user_name,'80902387' as work_no,'张秋菊' as sales_name,'否' as is_part_time_service_manager,1 as salesperson_sales_value_fp_rate,1 as salesperson_profit_fp_rate,0 as service_user_sales_value_fp_rate,0 as service_user_profit_fp_rate
+union all   select '115236' as customer_no,'' as service_user_work_no,'' as service_user_name,'81125246' as work_no,'邓金龙' as sales_name,'否' as is_part_time_service_manager,1 as salesperson_sales_value_fp_rate,1 as salesperson_profit_fp_rate,0 as service_user_sales_value_fp_rate,0 as service_user_profit_fp_rate
+union all   select '115242' as customer_no,'' as service_user_work_no,'' as service_user_name,'80930345' as work_no,'黄泰洋' as sales_name,'否' as is_part_time_service_manager,1 as salesperson_sales_value_fp_rate,1 as salesperson_profit_fp_rate,0 as service_user_sales_value_fp_rate,0 as service_user_profit_fp_rate
+union all   select '115253' as customer_no,'' as service_user_work_no,'' as service_user_name,'81125246' as work_no,'邓金龙' as sales_name,'否' as is_part_time_service_manager,1 as salesperson_sales_value_fp_rate,1 as salesperson_profit_fp_rate,0 as service_user_sales_value_fp_rate,0 as service_user_profit_fp_rate
+union all   select '115274' as customer_no,'80926168' as service_user_work_no,'张全伟' as service_user_name,'80926168' as work_no,'张全伟' as sales_name,'是' as is_part_time_service_manager,0 as salesperson_sales_value_fp_rate,0 as salesperson_profit_fp_rate,0.3 as service_user_sales_value_fp_rate,0.5 as service_user_profit_fp_rate
+union all   select '115471' as customer_no,'81056210' as service_user_work_no,'龚春鸿' as service_user_name,'81056210' as work_no,'龚春鸿' as sales_name,'是' as is_part_time_service_manager,0 as salesperson_sales_value_fp_rate,0 as salesperson_profit_fp_rate,0.3 as service_user_sales_value_fp_rate,0.5 as service_user_profit_fp_rate
+union all   select '115490' as customer_no,'' as service_user_work_no,'' as service_user_name,'81125246' as work_no,'邓金龙' as sales_name,'否' as is_part_time_service_manager,1 as salesperson_sales_value_fp_rate,1 as salesperson_profit_fp_rate,0 as service_user_sales_value_fp_rate,0 as service_user_profit_fp_rate
+union all   select '115527' as customer_no,'' as service_user_work_no,'' as service_user_name,'80913082' as work_no,'袁明华' as sales_name,'否' as is_part_time_service_manager,1 as salesperson_sales_value_fp_rate,1 as salesperson_profit_fp_rate,0 as service_user_sales_value_fp_rate,0 as service_user_profit_fp_rate
+union all   select '115607' as customer_no,'' as service_user_work_no,'' as service_user_name,'80941174' as work_no,'邓伟' as sales_name,'否' as is_part_time_service_manager,1 as salesperson_sales_value_fp_rate,1 as salesperson_profit_fp_rate,0 as service_user_sales_value_fp_rate,0 as service_user_profit_fp_rate
+union all   select '115645' as customer_no,'' as service_user_work_no,'' as service_user_name,'81156848' as work_no,'龚明瑶' as sales_name,'否' as is_part_time_service_manager,1 as salesperson_sales_value_fp_rate,1 as salesperson_profit_fp_rate,0 as service_user_sales_value_fp_rate,0 as service_user_profit_fp_rate
+union all   select '115710' as customer_no,'' as service_user_work_no,'' as service_user_name,'80960714' as work_no,'李远军' as sales_name,'否' as is_part_time_service_manager,1 as salesperson_sales_value_fp_rate,1 as salesperson_profit_fp_rate,0 as service_user_sales_value_fp_rate,0 as service_user_profit_fp_rate
+union all   select '115742' as customer_no,'' as service_user_work_no,'' as service_user_name,'80878413' as work_no,'欧启' as sales_name,'否' as is_part_time_service_manager,1 as salesperson_sales_value_fp_rate,1 as salesperson_profit_fp_rate,0 as service_user_sales_value_fp_rate,0 as service_user_profit_fp_rate
+union all   select '115807' as customer_no,'' as service_user_work_no,'' as service_user_name,'80960714' as work_no,'李远军' as sales_name,'否' as is_part_time_service_manager,1 as salesperson_sales_value_fp_rate,1 as salesperson_profit_fp_rate,0 as service_user_sales_value_fp_rate,0 as service_user_profit_fp_rate
+union all   select '115858' as customer_no,'' as service_user_work_no,'' as service_user_name,'80929962' as work_no,'李宏方' as sales_name,'否' as is_part_time_service_manager,1 as salesperson_sales_value_fp_rate,1 as salesperson_profit_fp_rate,0 as service_user_sales_value_fp_rate,0 as service_user_profit_fp_rate
+union all   select '115915' as customer_no,'80980977' as service_user_work_no,'黄小红' as service_user_name,'80980977' as work_no,'黄小红' as sales_name,'是' as is_part_time_service_manager,0 as salesperson_sales_value_fp_rate,0 as salesperson_profit_fp_rate,0.3 as service_user_sales_value_fp_rate,0.5 as service_user_profit_fp_rate
+union all   select '116101' as customer_no,'' as service_user_work_no,'' as service_user_name,'80930345' as work_no,'黄泰洋' as sales_name,'否' as is_part_time_service_manager,1 as salesperson_sales_value_fp_rate,1 as salesperson_profit_fp_rate,0 as service_user_sales_value_fp_rate,0 as service_user_profit_fp_rate
+union all   select '116141' as customer_no,'' as service_user_work_no,'' as service_user_name,'80912842' as work_no,'刘悦' as sales_name,'否' as is_part_time_service_manager,1 as salesperson_sales_value_fp_rate,1 as salesperson_profit_fp_rate,0 as service_user_sales_value_fp_rate,0 as service_user_profit_fp_rate
+union all   select '116433' as customer_no,'80619984' as service_user_work_no,'翟敏' as service_user_name,'80619984' as work_no,'翟敏' as sales_name,'是' as is_part_time_service_manager,0 as salesperson_sales_value_fp_rate,0 as salesperson_profit_fp_rate,0.3 as service_user_sales_value_fp_rate,0.5 as service_user_profit_fp_rate
+union all   select '116461' as customer_no,'80926168' as service_user_work_no,'张全伟' as service_user_name,'80926168' as work_no,'张全伟' as sales_name,'是' as is_part_time_service_manager,0 as salesperson_sales_value_fp_rate,0 as salesperson_profit_fp_rate,0.3 as service_user_sales_value_fp_rate,0.5 as service_user_profit_fp_rate
+union all   select '116539' as customer_no,'' as service_user_work_no,'' as service_user_name,'80927654' as work_no,'向亚聪' as sales_name,'否' as is_part_time_service_manager,1 as salesperson_sales_value_fp_rate,1 as salesperson_profit_fp_rate,0 as service_user_sales_value_fp_rate,0 as service_user_profit_fp_rate
+union all   select '116665' as customer_no,'' as service_user_work_no,'' as service_user_name,'80927654' as work_no,'向亚聪' as sales_name,'否' as is_part_time_service_manager,1 as salesperson_sales_value_fp_rate,1 as salesperson_profit_fp_rate,0 as service_user_sales_value_fp_rate,0 as service_user_profit_fp_rate
+union all   select '116670' as customer_no,'' as service_user_work_no,'' as service_user_name,'81039868' as work_no,'刘昱廷' as sales_name,'否' as is_part_time_service_manager,1 as salesperson_sales_value_fp_rate,1 as salesperson_profit_fp_rate,0 as service_user_sales_value_fp_rate,0 as service_user_profit_fp_rate
+union all   select '116760' as customer_no,'' as service_user_work_no,'' as service_user_name,'80930345' as work_no,'黄泰洋' as sales_name,'否' as is_part_time_service_manager,1 as salesperson_sales_value_fp_rate,1 as salesperson_profit_fp_rate,0 as service_user_sales_value_fp_rate,0 as service_user_profit_fp_rate
+union all   select '116943' as customer_no,'' as service_user_work_no,'' as service_user_name,'80895095' as work_no,'罗泽剑' as sales_name,'否' as is_part_time_service_manager,1 as salesperson_sales_value_fp_rate,1 as salesperson_profit_fp_rate,0 as service_user_sales_value_fp_rate,0 as service_user_profit_fp_rate
+union all   select '116962' as customer_no,'' as service_user_work_no,'' as service_user_name,'80960714' as work_no,'李远军' as sales_name,'否' as is_part_time_service_manager,1 as salesperson_sales_value_fp_rate,1 as salesperson_profit_fp_rate,0 as service_user_sales_value_fp_rate,0 as service_user_profit_fp_rate
+union all   select '116988' as customer_no,'' as service_user_work_no,'' as service_user_name,'80895095' as work_no,'罗泽剑' as sales_name,'否' as is_part_time_service_manager,1 as salesperson_sales_value_fp_rate,1 as salesperson_profit_fp_rate,0 as service_user_sales_value_fp_rate,0 as service_user_profit_fp_rate
+union all   select '116998' as customer_no,'' as service_user_work_no,'' as service_user_name,'80895095' as work_no,'罗泽剑' as sales_name,'否' as is_part_time_service_manager,1 as salesperson_sales_value_fp_rate,1 as salesperson_profit_fp_rate,0 as service_user_sales_value_fp_rate,0 as service_user_profit_fp_rate
+union all   select '117016' as customer_no,'' as service_user_work_no,'' as service_user_name,'80895095' as work_no,'罗泽剑' as sales_name,'否' as is_part_time_service_manager,1 as salesperson_sales_value_fp_rate,1 as salesperson_profit_fp_rate,0 as service_user_sales_value_fp_rate,0 as service_user_profit_fp_rate
+union all   select '117020' as customer_no,'' as service_user_work_no,'' as service_user_name,'80895095' as work_no,'罗泽剑' as sales_name,'否' as is_part_time_service_manager,1 as salesperson_sales_value_fp_rate,1 as salesperson_profit_fp_rate,0 as service_user_sales_value_fp_rate,0 as service_user_profit_fp_rate
+union all   select '117022' as customer_no,'80909562' as service_user_work_no,'陈乾' as service_user_name,'80909562' as work_no,'陈乾' as sales_name,'是' as is_part_time_service_manager,0 as salesperson_sales_value_fp_rate,0 as salesperson_profit_fp_rate,0.3 as service_user_sales_value_fp_rate,0.5 as service_user_profit_fp_rate
+union all   select '117028' as customer_no,'81056210' as service_user_work_no,'龚春鸿' as service_user_name,'81056210' as work_no,'龚春鸿' as sales_name,'是' as is_part_time_service_manager,0 as salesperson_sales_value_fp_rate,0 as salesperson_profit_fp_rate,0.3 as service_user_sales_value_fp_rate,0.5 as service_user_profit_fp_rate
+union all   select '117052' as customer_no,'' as service_user_work_no,'' as service_user_name,'80930345' as work_no,'黄泰洋' as sales_name,'否' as is_part_time_service_manager,1 as salesperson_sales_value_fp_rate,1 as salesperson_profit_fp_rate,0 as service_user_sales_value_fp_rate,0 as service_user_profit_fp_rate
+union all   select '117058' as customer_no,'' as service_user_work_no,'' as service_user_name,'81039868' as work_no,'刘昱廷' as sales_name,'否' as is_part_time_service_manager,1 as salesperson_sales_value_fp_rate,1 as salesperson_profit_fp_rate,0 as service_user_sales_value_fp_rate,0 as service_user_profit_fp_rate
+union all   select '117093' as customer_no,'' as service_user_work_no,'' as service_user_name,'80941174' as work_no,'邓伟' as sales_name,'否' as is_part_time_service_manager,1 as salesperson_sales_value_fp_rate,1 as salesperson_profit_fp_rate,0 as service_user_sales_value_fp_rate,0 as service_user_profit_fp_rate
+union all   select '117112' as customer_no,'' as service_user_work_no,'' as service_user_name,'80930345' as work_no,'黄泰洋' as sales_name,'否' as is_part_time_service_manager,1 as salesperson_sales_value_fp_rate,1 as salesperson_profit_fp_rate,0 as service_user_sales_value_fp_rate,0 as service_user_profit_fp_rate
+union all   select '117115' as customer_no,'' as service_user_work_no,'' as service_user_name,'81156848' as work_no,'龚明瑶' as sales_name,'否' as is_part_time_service_manager,1 as salesperson_sales_value_fp_rate,1 as salesperson_profit_fp_rate,0 as service_user_sales_value_fp_rate,0 as service_user_profit_fp_rate
+union all   select '117134' as customer_no,'' as service_user_work_no,'' as service_user_name,'80930345' as work_no,'黄泰洋' as sales_name,'否' as is_part_time_service_manager,1 as salesperson_sales_value_fp_rate,1 as salesperson_profit_fp_rate,0 as service_user_sales_value_fp_rate,0 as service_user_profit_fp_rate
+union all   select '117135' as customer_no,'' as service_user_work_no,'' as service_user_name,'80930345' as work_no,'黄泰洋' as sales_name,'否' as is_part_time_service_manager,1 as salesperson_sales_value_fp_rate,1 as salesperson_profit_fp_rate,0 as service_user_sales_value_fp_rate,0 as service_user_profit_fp_rate
+union all   select '117213' as customer_no,'' as service_user_work_no,'' as service_user_name,'80930345' as work_no,'黄泰洋' as sales_name,'否' as is_part_time_service_manager,1 as salesperson_sales_value_fp_rate,1 as salesperson_profit_fp_rate,0 as service_user_sales_value_fp_rate,0 as service_user_profit_fp_rate
+union all   select '117230' as customer_no,'' as service_user_work_no,'' as service_user_name,'80887610' as work_no,'杨佐' as sales_name,'否' as is_part_time_service_manager,1 as salesperson_sales_value_fp_rate,1 as salesperson_profit_fp_rate,0 as service_user_sales_value_fp_rate,0 as service_user_profit_fp_rate
+union all   select '117239' as customer_no,'' as service_user_work_no,'' as service_user_name,'80878413' as work_no,'欧启' as sales_name,'否' as is_part_time_service_manager,1 as salesperson_sales_value_fp_rate,1 as salesperson_profit_fp_rate,0 as service_user_sales_value_fp_rate,0 as service_user_profit_fp_rate
+union all   select '117245' as customer_no,'' as service_user_work_no,'' as service_user_name,'80930345' as work_no,'黄泰洋' as sales_name,'否' as is_part_time_service_manager,1 as salesperson_sales_value_fp_rate,1 as salesperson_profit_fp_rate,0 as service_user_sales_value_fp_rate,0 as service_user_profit_fp_rate
+union all   select '117340' as customer_no,'' as service_user_work_no,'' as service_user_name,'80956511' as work_no,'郭珍滟' as sales_name,'否' as is_part_time_service_manager,1 as salesperson_sales_value_fp_rate,1 as salesperson_profit_fp_rate,0 as service_user_sales_value_fp_rate,0 as service_user_profit_fp_rate
+union all   select '117348' as customer_no,'' as service_user_work_no,'' as service_user_name,'80913082' as work_no,'袁明华' as sales_name,'否' as is_part_time_service_manager,1 as salesperson_sales_value_fp_rate,1 as salesperson_profit_fp_rate,0 as service_user_sales_value_fp_rate,0 as service_user_profit_fp_rate
+union all   select '117438' as customer_no,'' as service_user_work_no,'' as service_user_name,'80878413' as work_no,'欧启' as sales_name,'否' as is_part_time_service_manager,1 as salesperson_sales_value_fp_rate,1 as salesperson_profit_fp_rate,0 as service_user_sales_value_fp_rate,0 as service_user_profit_fp_rate
+union all   select '117454' as customer_no,'' as service_user_work_no,'' as service_user_name,'80895095' as work_no,'罗泽剑' as sales_name,'否' as is_part_time_service_manager,1 as salesperson_sales_value_fp_rate,1 as salesperson_profit_fp_rate,0 as service_user_sales_value_fp_rate,0 as service_user_profit_fp_rate
+union all   select '117543' as customer_no,'' as service_user_work_no,'' as service_user_name,'80927654' as work_no,'向亚聪' as sales_name,'否' as is_part_time_service_manager,1 as salesperson_sales_value_fp_rate,1 as salesperson_profit_fp_rate,0 as service_user_sales_value_fp_rate,0 as service_user_profit_fp_rate
+union all   select '117643' as customer_no,'' as service_user_work_no,'' as service_user_name,'80941174' as work_no,'邓伟' as sales_name,'否' as is_part_time_service_manager,1 as salesperson_sales_value_fp_rate,1 as salesperson_profit_fp_rate,0 as service_user_sales_value_fp_rate,0 as service_user_profit_fp_rate
+union all   select '117673' as customer_no,'' as service_user_work_no,'' as service_user_name,'80887610' as work_no,'杨佐' as sales_name,'否' as is_part_time_service_manager,1 as salesperson_sales_value_fp_rate,1 as salesperson_profit_fp_rate,0 as service_user_sales_value_fp_rate,0 as service_user_profit_fp_rate
+union all   select '117721' as customer_no,'' as service_user_work_no,'' as service_user_name,'80956511' as work_no,'郭珍滟' as sales_name,'否' as is_part_time_service_manager,1 as salesperson_sales_value_fp_rate,1 as salesperson_profit_fp_rate,0 as service_user_sales_value_fp_rate,0 as service_user_profit_fp_rate
+union all   select '117728' as customer_no,'80619984' as service_user_work_no,'翟敏' as service_user_name,'80619984' as work_no,'翟敏' as sales_name,'是' as is_part_time_service_manager,0 as salesperson_sales_value_fp_rate,0 as salesperson_profit_fp_rate,0.3 as service_user_sales_value_fp_rate,0.5 as service_user_profit_fp_rate
+union all   select '117729' as customer_no,'' as service_user_work_no,'' as service_user_name,'80927653' as work_no,'陈炳' as sales_name,'否' as is_part_time_service_manager,1 as salesperson_sales_value_fp_rate,1 as salesperson_profit_fp_rate,0 as service_user_sales_value_fp_rate,0 as service_user_profit_fp_rate
+union all   select '117748' as customer_no,'' as service_user_work_no,'' as service_user_name,'80927653' as work_no,'陈炳' as sales_name,'否' as is_part_time_service_manager,1 as salesperson_sales_value_fp_rate,1 as salesperson_profit_fp_rate,0 as service_user_sales_value_fp_rate,0 as service_user_profit_fp_rate
+union all   select '117749' as customer_no,'' as service_user_work_no,'' as service_user_name,'81027274' as work_no,'李亚秋' as sales_name,'否' as is_part_time_service_manager,1 as salesperson_sales_value_fp_rate,1 as salesperson_profit_fp_rate,0 as service_user_sales_value_fp_rate,0 as service_user_profit_fp_rate
+union all   select '117761' as customer_no,'80619984' as service_user_work_no,'翟敏' as service_user_name,'80619984' as work_no,'翟敏' as sales_name,'是' as is_part_time_service_manager,0 as salesperson_sales_value_fp_rate,0 as salesperson_profit_fp_rate,0.3 as service_user_sales_value_fp_rate,0.5 as service_user_profit_fp_rate
+union all   select '117766' as customer_no,'' as service_user_work_no,'' as service_user_name,'80927653' as work_no,'陈炳' as sales_name,'否' as is_part_time_service_manager,1 as salesperson_sales_value_fp_rate,1 as salesperson_profit_fp_rate,0 as service_user_sales_value_fp_rate,0 as service_user_profit_fp_rate
+union all   select '117773' as customer_no,'80619984' as service_user_work_no,'翟敏' as service_user_name,'80619984' as work_no,'翟敏' as sales_name,'是' as is_part_time_service_manager,0 as salesperson_sales_value_fp_rate,0 as salesperson_profit_fp_rate,0.3 as service_user_sales_value_fp_rate,0.5 as service_user_profit_fp_rate
+union all   select '117776' as customer_no,'' as service_user_work_no,'' as service_user_name,'80927653' as work_no,'陈炳' as sales_name,'否' as is_part_time_service_manager,1 as salesperson_sales_value_fp_rate,1 as salesperson_profit_fp_rate,0 as service_user_sales_value_fp_rate,0 as service_user_profit_fp_rate
+union all   select '117777' as customer_no,'' as service_user_work_no,'' as service_user_name,'80927653' as work_no,'陈炳' as sales_name,'否' as is_part_time_service_manager,1 as salesperson_sales_value_fp_rate,1 as salesperson_profit_fp_rate,0 as service_user_sales_value_fp_rate,0 as service_user_profit_fp_rate
+union all   select '117781' as customer_no,'' as service_user_work_no,'' as service_user_name,'81027274' as work_no,'李亚秋' as sales_name,'否' as is_part_time_service_manager,1 as salesperson_sales_value_fp_rate,1 as salesperson_profit_fp_rate,0 as service_user_sales_value_fp_rate,0 as service_user_profit_fp_rate
+union all   select '117782' as customer_no,'' as service_user_work_no,'' as service_user_name,'80927653' as work_no,'陈炳' as sales_name,'否' as is_part_time_service_manager,1 as salesperson_sales_value_fp_rate,1 as salesperson_profit_fp_rate,0 as service_user_sales_value_fp_rate,0 as service_user_profit_fp_rate
+union all   select '117783' as customer_no,'' as service_user_work_no,'' as service_user_name,'81027274' as work_no,'李亚秋' as sales_name,'否' as is_part_time_service_manager,1 as salesperson_sales_value_fp_rate,1 as salesperson_profit_fp_rate,0 as service_user_sales_value_fp_rate,0 as service_user_profit_fp_rate
+union all   select '117784' as customer_no,'' as service_user_work_no,'' as service_user_name,'81027274' as work_no,'李亚秋' as sales_name,'否' as is_part_time_service_manager,1 as salesperson_sales_value_fp_rate,1 as salesperson_profit_fp_rate,0 as service_user_sales_value_fp_rate,0 as service_user_profit_fp_rate
+union all   select '117785' as customer_no,'80980977' as service_user_work_no,'黄小红' as service_user_name,'80980977' as work_no,'黄小红' as sales_name,'是' as is_part_time_service_manager,0 as salesperson_sales_value_fp_rate,0 as salesperson_profit_fp_rate,0.3 as service_user_sales_value_fp_rate,0.5 as service_user_profit_fp_rate
+union all   select '117786' as customer_no,'' as service_user_work_no,'' as service_user_name,'81027274' as work_no,'李亚秋' as sales_name,'否' as is_part_time_service_manager,1 as salesperson_sales_value_fp_rate,1 as salesperson_profit_fp_rate,0 as service_user_sales_value_fp_rate,0 as service_user_profit_fp_rate
+union all   select '117791' as customer_no,'' as service_user_work_no,'' as service_user_name,'80927653' as work_no,'陈炳' as sales_name,'否' as is_part_time_service_manager,1 as salesperson_sales_value_fp_rate,1 as salesperson_profit_fp_rate,0 as service_user_sales_value_fp_rate,0 as service_user_profit_fp_rate
+union all   select '117796' as customer_no,'' as service_user_work_no,'' as service_user_name,'80927653' as work_no,'陈炳' as sales_name,'否' as is_part_time_service_manager,1 as salesperson_sales_value_fp_rate,1 as salesperson_profit_fp_rate,0 as service_user_sales_value_fp_rate,0 as service_user_profit_fp_rate
+union all   select '117797' as customer_no,'' as service_user_work_no,'' as service_user_name,'80941174' as work_no,'邓伟' as sales_name,'否' as is_part_time_service_manager,1 as salesperson_sales_value_fp_rate,1 as salesperson_profit_fp_rate,0 as service_user_sales_value_fp_rate,0 as service_user_profit_fp_rate
+union all   select '117800' as customer_no,'80619984' as service_user_work_no,'翟敏' as service_user_name,'80619984' as work_no,'翟敏' as sales_name,'是' as is_part_time_service_manager,0 as salesperson_sales_value_fp_rate,0 as salesperson_profit_fp_rate,0.3 as service_user_sales_value_fp_rate,0.5 as service_user_profit_fp_rate
+union all   select '117805' as customer_no,'80619984' as service_user_work_no,'翟敏' as service_user_name,'80619984' as work_no,'翟敏' as sales_name,'是' as is_part_time_service_manager,0 as salesperson_sales_value_fp_rate,0 as salesperson_profit_fp_rate,0.3 as service_user_sales_value_fp_rate,0.5 as service_user_profit_fp_rate
+union all   select '117822' as customer_no,'' as service_user_work_no,'' as service_user_name,'81125246' as work_no,'邓金龙' as sales_name,'否' as is_part_time_service_manager,1 as salesperson_sales_value_fp_rate,1 as salesperson_profit_fp_rate,0 as service_user_sales_value_fp_rate,0 as service_user_profit_fp_rate
+union all   select '117860' as customer_no,'' as service_user_work_no,'' as service_user_name,'80902387' as work_no,'张秋菊' as sales_name,'否' as is_part_time_service_manager,1 as salesperson_sales_value_fp_rate,1 as salesperson_profit_fp_rate,0 as service_user_sales_value_fp_rate,0 as service_user_profit_fp_rate
+union all   select '117918' as customer_no,'' as service_user_work_no,'' as service_user_name,'80927653' as work_no,'陈炳' as sales_name,'否' as is_part_time_service_manager,1 as salesperson_sales_value_fp_rate,1 as salesperson_profit_fp_rate,0 as service_user_sales_value_fp_rate,0 as service_user_profit_fp_rate
+union all   select '117920' as customer_no,'' as service_user_work_no,'' as service_user_name,'80930345' as work_no,'黄泰洋' as sales_name,'否' as is_part_time_service_manager,1 as salesperson_sales_value_fp_rate,1 as salesperson_profit_fp_rate,0 as service_user_sales_value_fp_rate,0 as service_user_profit_fp_rate
+union all   select '117964' as customer_no,'80909562' as service_user_work_no,'陈乾' as service_user_name,'80909562' as work_no,'陈乾' as sales_name,'是' as is_part_time_service_manager,0 as salesperson_sales_value_fp_rate,0 as salesperson_profit_fp_rate,0.3 as service_user_sales_value_fp_rate,0.5 as service_user_profit_fp_rate
+union all   select '118050' as customer_no,'' as service_user_work_no,'' as service_user_name,'80941174' as work_no,'邓伟' as sales_name,'否' as is_part_time_service_manager,1 as salesperson_sales_value_fp_rate,1 as salesperson_profit_fp_rate,0 as service_user_sales_value_fp_rate,0 as service_user_profit_fp_rate
+union all   select '118061' as customer_no,'' as service_user_work_no,'' as service_user_name,'80887610' as work_no,'杨佐' as sales_name,'否' as is_part_time_service_manager,1 as salesperson_sales_value_fp_rate,1 as salesperson_profit_fp_rate,0 as service_user_sales_value_fp_rate,0 as service_user_profit_fp_rate
+union all   select '118169' as customer_no,'80893394' as service_user_work_no,'徐文强' as service_user_name,'80893394' as work_no,'徐文强' as sales_name,'是' as is_part_time_service_manager,0 as salesperson_sales_value_fp_rate,0 as salesperson_profit_fp_rate,0.3 as service_user_sales_value_fp_rate,0.5 as service_user_profit_fp_rate
+union all   select '118206' as customer_no,'' as service_user_work_no,'' as service_user_name,'80930345' as work_no,'黄泰洋' as sales_name,'否' as is_part_time_service_manager,1 as salesperson_sales_value_fp_rate,1 as salesperson_profit_fp_rate,0 as service_user_sales_value_fp_rate,0 as service_user_profit_fp_rate
+union all   select '118212' as customer_no,'' as service_user_work_no,'' as service_user_name,'80902387' as work_no,'张秋菊' as sales_name,'否' as is_part_time_service_manager,1 as salesperson_sales_value_fp_rate,1 as salesperson_profit_fp_rate,0 as service_user_sales_value_fp_rate,0 as service_user_profit_fp_rate
+union all   select '118239' as customer_no,'' as service_user_work_no,'' as service_user_name,'80927654' as work_no,'向亚聪' as sales_name,'否' as is_part_time_service_manager,1 as salesperson_sales_value_fp_rate,1 as salesperson_profit_fp_rate,0 as service_user_sales_value_fp_rate,0 as service_user_profit_fp_rate
+union all   select '118470' as customer_no,'' as service_user_work_no,'' as service_user_name,'81039868' as work_no,'刘昱廷' as sales_name,'否' as is_part_time_service_manager,1 as salesperson_sales_value_fp_rate,1 as salesperson_profit_fp_rate,0 as service_user_sales_value_fp_rate,0 as service_user_profit_fp_rate
+union all   select '118522' as customer_no,'' as service_user_work_no,'' as service_user_name,'80941174' as work_no,'邓伟' as sales_name,'否' as is_part_time_service_manager,1 as salesperson_sales_value_fp_rate,1 as salesperson_profit_fp_rate,0 as service_user_sales_value_fp_rate,0 as service_user_profit_fp_rate
+union all   select '118592' as customer_no,'' as service_user_work_no,'' as service_user_name,'80930345' as work_no,'黄泰洋' as sales_name,'否' as is_part_time_service_manager,1 as salesperson_sales_value_fp_rate,1 as salesperson_profit_fp_rate,0 as service_user_sales_value_fp_rate,0 as service_user_profit_fp_rate
+union all   select '118670' as customer_no,'' as service_user_work_no,'' as service_user_name,'81125246' as work_no,'邓金龙' as sales_name,'否' as is_part_time_service_manager,1 as salesperson_sales_value_fp_rate,1 as salesperson_profit_fp_rate,0 as service_user_sales_value_fp_rate,0 as service_user_profit_fp_rate
+union all   select '118717' as customer_no,'' as service_user_work_no,'' as service_user_name,'81125246' as work_no,'邓金龙' as sales_name,'否' as is_part_time_service_manager,1 as salesperson_sales_value_fp_rate,1 as salesperson_profit_fp_rate,0 as service_user_sales_value_fp_rate,0 as service_user_profit_fp_rate
+union all   select '118864' as customer_no,'' as service_user_work_no,'' as service_user_name,'80887610' as work_no,'杨佐' as sales_name,'否' as is_part_time_service_manager,1 as salesperson_sales_value_fp_rate,1 as salesperson_profit_fp_rate,0 as service_user_sales_value_fp_rate,0 as service_user_profit_fp_rate
+union all   select '118879' as customer_no,'' as service_user_work_no,'' as service_user_name,'80878413' as work_no,'欧启' as sales_name,'否' as is_part_time_service_manager,1 as salesperson_sales_value_fp_rate,1 as salesperson_profit_fp_rate,0 as service_user_sales_value_fp_rate,0 as service_user_profit_fp_rate
+union all   select '118933' as customer_no,'' as service_user_work_no,'' as service_user_name,'80960714' as work_no,'李远军' as sales_name,'否' as is_part_time_service_manager,1 as salesperson_sales_value_fp_rate,1 as salesperson_profit_fp_rate,0 as service_user_sales_value_fp_rate,0 as service_user_profit_fp_rate
+union all   select '118943' as customer_no,'' as service_user_work_no,'' as service_user_name,'80895095' as work_no,'罗泽剑' as sales_name,'否' as is_part_time_service_manager,1 as salesperson_sales_value_fp_rate,1 as salesperson_profit_fp_rate,0 as service_user_sales_value_fp_rate,0 as service_user_profit_fp_rate
+union all   select '118973' as customer_no,'' as service_user_work_no,'' as service_user_name,'81039868' as work_no,'刘昱廷' as sales_name,'否' as is_part_time_service_manager,1 as salesperson_sales_value_fp_rate,1 as salesperson_profit_fp_rate,0 as service_user_sales_value_fp_rate,0 as service_user_profit_fp_rate
+union all   select '119076' as customer_no,'' as service_user_work_no,'' as service_user_name,'80927653' as work_no,'陈炳' as sales_name,'否' as is_part_time_service_manager,1 as salesperson_sales_value_fp_rate,1 as salesperson_profit_fp_rate,0 as service_user_sales_value_fp_rate,0 as service_user_profit_fp_rate
+union all   select '119252' as customer_no,'' as service_user_work_no,'' as service_user_name,'80902387' as work_no,'张秋菊' as sales_name,'否' as is_part_time_service_manager,1 as salesperson_sales_value_fp_rate,1 as salesperson_profit_fp_rate,0 as service_user_sales_value_fp_rate,0 as service_user_profit_fp_rate
+union all   select '119432' as customer_no,'' as service_user_work_no,'' as service_user_name,'80929962' as work_no,'李宏方' as sales_name,'否' as is_part_time_service_manager,1 as salesperson_sales_value_fp_rate,1 as salesperson_profit_fp_rate,0 as service_user_sales_value_fp_rate,0 as service_user_profit_fp_rate
+union all   select '119513' as customer_no,'' as service_user_work_no,'' as service_user_name,'80927654' as work_no,'向亚聪' as sales_name,'否' as is_part_time_service_manager,1 as salesperson_sales_value_fp_rate,1 as salesperson_profit_fp_rate,0 as service_user_sales_value_fp_rate,0 as service_user_profit_fp_rate
+union all   select '119517' as customer_no,'' as service_user_work_no,'' as service_user_name,'80929962' as work_no,'李宏方' as sales_name,'否' as is_part_time_service_manager,1 as salesperson_sales_value_fp_rate,1 as salesperson_profit_fp_rate,0 as service_user_sales_value_fp_rate,0 as service_user_profit_fp_rate
+union all   select '119531' as customer_no,'' as service_user_work_no,'' as service_user_name,'81125246' as work_no,'邓金龙' as sales_name,'否' as is_part_time_service_manager,1 as salesperson_sales_value_fp_rate,1 as salesperson_profit_fp_rate,0 as service_user_sales_value_fp_rate,0 as service_user_profit_fp_rate
+union all   select '119534' as customer_no,'' as service_user_work_no,'' as service_user_name,'80886777' as work_no,'张意' as sales_name,'否' as is_part_time_service_manager,1 as salesperson_sales_value_fp_rate,1 as salesperson_profit_fp_rate,0 as service_user_sales_value_fp_rate,0 as service_user_profit_fp_rate
+union all   select '119548' as customer_no,'' as service_user_work_no,'' as service_user_name,'80929962' as work_no,'李宏方' as sales_name,'否' as is_part_time_service_manager,1 as salesperson_sales_value_fp_rate,1 as salesperson_profit_fp_rate,0 as service_user_sales_value_fp_rate,0 as service_user_profit_fp_rate
+union all   select '119558' as customer_no,'' as service_user_work_no,'' as service_user_name,'80913082' as work_no,'袁明华' as sales_name,'否' as is_part_time_service_manager,1 as salesperson_sales_value_fp_rate,1 as salesperson_profit_fp_rate,0 as service_user_sales_value_fp_rate,0 as service_user_profit_fp_rate
+union all   select '119648' as customer_no,'' as service_user_work_no,'' as service_user_name,'80956511' as work_no,'郭珍滟' as sales_name,'否' as is_part_time_service_manager,1 as salesperson_sales_value_fp_rate,1 as salesperson_profit_fp_rate,0 as service_user_sales_value_fp_rate,0 as service_user_profit_fp_rate
+union all   select '119659' as customer_no,'' as service_user_work_no,'' as service_user_name,'81039868' as work_no,'刘昱廷' as sales_name,'否' as is_part_time_service_manager,1 as salesperson_sales_value_fp_rate,1 as salesperson_profit_fp_rate,0 as service_user_sales_value_fp_rate,0 as service_user_profit_fp_rate
+union all   select '119701' as customer_no,'' as service_user_work_no,'' as service_user_name,'80941174' as work_no,'邓伟' as sales_name,'否' as is_part_time_service_manager,1 as salesperson_sales_value_fp_rate,1 as salesperson_profit_fp_rate,0 as service_user_sales_value_fp_rate,0 as service_user_profit_fp_rate
+union all   select '119756' as customer_no,'' as service_user_work_no,'' as service_user_name,'81039868' as work_no,'刘昱廷' as sales_name,'否' as is_part_time_service_manager,1 as salesperson_sales_value_fp_rate,1 as salesperson_profit_fp_rate,0 as service_user_sales_value_fp_rate,0 as service_user_profit_fp_rate
+union all   select '119765' as customer_no,'' as service_user_work_no,'' as service_user_name,'81125246' as work_no,'邓金龙' as sales_name,'否' as is_part_time_service_manager,1 as salesperson_sales_value_fp_rate,1 as salesperson_profit_fp_rate,0 as service_user_sales_value_fp_rate,0 as service_user_profit_fp_rate
+union all   select '119930' as customer_no,'' as service_user_work_no,'' as service_user_name,'81027274' as work_no,'李亚秋' as sales_name,'否' as is_part_time_service_manager,1 as salesperson_sales_value_fp_rate,1 as salesperson_profit_fp_rate,0 as service_user_sales_value_fp_rate,0 as service_user_profit_fp_rate
+union all   select '119945' as customer_no,'80893394' as service_user_work_no,'徐文强' as service_user_name,'80893394' as work_no,'徐文强' as sales_name,'是' as is_part_time_service_manager,0 as salesperson_sales_value_fp_rate,0 as salesperson_profit_fp_rate,0.3 as service_user_sales_value_fp_rate,0.5 as service_user_profit_fp_rate
+union all   select '120041' as customer_no,'' as service_user_work_no,'' as service_user_name,'81039868' as work_no,'刘昱廷' as sales_name,'否' as is_part_time_service_manager,1 as salesperson_sales_value_fp_rate,1 as salesperson_profit_fp_rate,0 as service_user_sales_value_fp_rate,0 as service_user_profit_fp_rate
+union all   select '120092' as customer_no,'' as service_user_work_no,'' as service_user_name,'81039868' as work_no,'刘昱廷' as sales_name,'否' as is_part_time_service_manager,1 as salesperson_sales_value_fp_rate,1 as salesperson_profit_fp_rate,0 as service_user_sales_value_fp_rate,0 as service_user_profit_fp_rate
+union all   select '120105' as customer_no,'' as service_user_work_no,'' as service_user_name,'81039868' as work_no,'刘昱廷' as sales_name,'否' as is_part_time_service_manager,1 as salesperson_sales_value_fp_rate,1 as salesperson_profit_fp_rate,0 as service_user_sales_value_fp_rate,0 as service_user_profit_fp_rate
+union all   select '120231' as customer_no,'' as service_user_work_no,'' as service_user_name,'80887610' as work_no,'杨佐' as sales_name,'否' as is_part_time_service_manager,1 as salesperson_sales_value_fp_rate,1 as salesperson_profit_fp_rate,0 as service_user_sales_value_fp_rate,0 as service_user_profit_fp_rate
+union all   select '120287' as customer_no,'' as service_user_work_no,'' as service_user_name,'80930345' as work_no,'黄泰洋' as sales_name,'否' as is_part_time_service_manager,1 as salesperson_sales_value_fp_rate,1 as salesperson_profit_fp_rate,0 as service_user_sales_value_fp_rate,0 as service_user_profit_fp_rate
+union all   select '120497' as customer_no,'' as service_user_work_no,'' as service_user_name,'81039868' as work_no,'刘昱廷' as sales_name,'否' as is_part_time_service_manager,1 as salesperson_sales_value_fp_rate,1 as salesperson_profit_fp_rate,0 as service_user_sales_value_fp_rate,0 as service_user_profit_fp_rate
+union all   select '120513' as customer_no,'' as service_user_work_no,'' as service_user_name,'81125246' as work_no,'邓金龙' as sales_name,'否' as is_part_time_service_manager,1 as salesperson_sales_value_fp_rate,1 as salesperson_profit_fp_rate,0 as service_user_sales_value_fp_rate,0 as service_user_profit_fp_rate
+union all   select '120541' as customer_no,'' as service_user_work_no,'' as service_user_name,'80912842' as work_no,'刘悦' as sales_name,'否' as is_part_time_service_manager,1 as salesperson_sales_value_fp_rate,1 as salesperson_profit_fp_rate,0 as service_user_sales_value_fp_rate,0 as service_user_profit_fp_rate
+union all   select '120543' as customer_no,'' as service_user_work_no,'' as service_user_name,'80878413' as work_no,'欧启' as sales_name,'否' as is_part_time_service_manager,1 as salesperson_sales_value_fp_rate,1 as salesperson_profit_fp_rate,0 as service_user_sales_value_fp_rate,0 as service_user_profit_fp_rate
+union all   select '120581' as customer_no,'' as service_user_work_no,'' as service_user_name,'80927654' as work_no,'向亚聪' as sales_name,'否' as is_part_time_service_manager,1 as salesperson_sales_value_fp_rate,1 as salesperson_profit_fp_rate,0 as service_user_sales_value_fp_rate,0 as service_user_profit_fp_rate
+union all   select '120600' as customer_no,'' as service_user_work_no,'' as service_user_name,'80887610' as work_no,'杨佐' as sales_name,'否' as is_part_time_service_manager,1 as salesperson_sales_value_fp_rate,1 as salesperson_profit_fp_rate,0 as service_user_sales_value_fp_rate,0 as service_user_profit_fp_rate
+union all   select '120640' as customer_no,'' as service_user_work_no,'' as service_user_name,'80927654' as work_no,'向亚聪' as sales_name,'否' as is_part_time_service_manager,1 as salesperson_sales_value_fp_rate,1 as salesperson_profit_fp_rate,0 as service_user_sales_value_fp_rate,0 as service_user_profit_fp_rate
+union all   select '120792' as customer_no,'' as service_user_work_no,'' as service_user_name,'80886777' as work_no,'张意' as sales_name,'否' as is_part_time_service_manager,1 as salesperson_sales_value_fp_rate,1 as salesperson_profit_fp_rate,0 as service_user_sales_value_fp_rate,0 as service_user_profit_fp_rate
+union all   select '120811' as customer_no,'' as service_user_work_no,'' as service_user_name,'81039868' as work_no,'刘昱廷' as sales_name,'否' as is_part_time_service_manager,1 as salesperson_sales_value_fp_rate,1 as salesperson_profit_fp_rate,0 as service_user_sales_value_fp_rate,0 as service_user_profit_fp_rate
+union all   select '120860' as customer_no,'' as service_user_work_no,'' as service_user_name,'80895095' as work_no,'罗泽剑' as sales_name,'否' as is_part_time_service_manager,1 as salesperson_sales_value_fp_rate,1 as salesperson_profit_fp_rate,0 as service_user_sales_value_fp_rate,0 as service_user_profit_fp_rate
+union all   select '120914' as customer_no,'' as service_user_work_no,'' as service_user_name,'81027274' as work_no,'李亚秋' as sales_name,'否' as is_part_time_service_manager,1 as salesperson_sales_value_fp_rate,1 as salesperson_profit_fp_rate,0 as service_user_sales_value_fp_rate,0 as service_user_profit_fp_rate
+union all   select '120924' as customer_no,'' as service_user_work_no,'' as service_user_name,'80929962' as work_no,'李宏方' as sales_name,'否' as is_part_time_service_manager,1 as salesperson_sales_value_fp_rate,1 as salesperson_profit_fp_rate,0 as service_user_sales_value_fp_rate,0 as service_user_profit_fp_rate
+union all   select '120958' as customer_no,'' as service_user_work_no,'' as service_user_name,'80927654' as work_no,'向亚聪' as sales_name,'否' as is_part_time_service_manager,1 as salesperson_sales_value_fp_rate,1 as salesperson_profit_fp_rate,0 as service_user_sales_value_fp_rate,0 as service_user_profit_fp_rate
+union all   select '120959' as customer_no,'' as service_user_work_no,'' as service_user_name,'80929962' as work_no,'李宏方' as sales_name,'否' as is_part_time_service_manager,1 as salesperson_sales_value_fp_rate,1 as salesperson_profit_fp_rate,0 as service_user_sales_value_fp_rate,0 as service_user_profit_fp_rate
+union all   select '120983' as customer_no,'' as service_user_work_no,'' as service_user_name,'80902387' as work_no,'张秋菊' as sales_name,'否' as is_part_time_service_manager,1 as salesperson_sales_value_fp_rate,1 as salesperson_profit_fp_rate,0 as service_user_sales_value_fp_rate,0 as service_user_profit_fp_rate
+union all   select '121042' as customer_no,'' as service_user_work_no,'' as service_user_name,'81125246' as work_no,'邓金龙' as sales_name,'否' as is_part_time_service_manager,1 as salesperson_sales_value_fp_rate,1 as salesperson_profit_fp_rate,0 as service_user_sales_value_fp_rate,0 as service_user_profit_fp_rate
+union all   select '121045' as customer_no,'' as service_user_work_no,'' as service_user_name,'80895095' as work_no,'罗泽剑' as sales_name,'否' as is_part_time_service_manager,1 as salesperson_sales_value_fp_rate,1 as salesperson_profit_fp_rate,0 as service_user_sales_value_fp_rate,0 as service_user_profit_fp_rate
+union all   select '121099' as customer_no,'' as service_user_work_no,'' as service_user_name,'80929962' as work_no,'李宏方' as sales_name,'否' as is_part_time_service_manager,1 as salesperson_sales_value_fp_rate,1 as salesperson_profit_fp_rate,0 as service_user_sales_value_fp_rate,0 as service_user_profit_fp_rate
+union all   select '121113' as customer_no,'' as service_user_work_no,'' as service_user_name,'81027274' as work_no,'李亚秋' as sales_name,'否' as is_part_time_service_manager,1 as salesperson_sales_value_fp_rate,1 as salesperson_profit_fp_rate,0 as service_user_sales_value_fp_rate,0 as service_user_profit_fp_rate
+union all   select '121172' as customer_no,'' as service_user_work_no,'' as service_user_name,'81041512' as work_no,'赵刚诚' as sales_name,'否' as is_part_time_service_manager,1 as salesperson_sales_value_fp_rate,1 as salesperson_profit_fp_rate,0 as service_user_sales_value_fp_rate,0 as service_user_profit_fp_rate
+union all   select '121180' as customer_no,'' as service_user_work_no,'' as service_user_name,'81156848' as work_no,'龚明瑶' as sales_name,'否' as is_part_time_service_manager,1 as salesperson_sales_value_fp_rate,1 as salesperson_profit_fp_rate,0 as service_user_sales_value_fp_rate,0 as service_user_profit_fp_rate
+union all   select '121181' as customer_no,'' as service_user_work_no,'' as service_user_name,'80930345' as work_no,'黄泰洋' as sales_name,'否' as is_part_time_service_manager,1 as salesperson_sales_value_fp_rate,1 as salesperson_profit_fp_rate,0 as service_user_sales_value_fp_rate,0 as service_user_profit_fp_rate
+union all   select '121211' as customer_no,'' as service_user_work_no,'' as service_user_name,'80930345' as work_no,'黄泰洋' as sales_name,'否' as is_part_time_service_manager,1 as salesperson_sales_value_fp_rate,1 as salesperson_profit_fp_rate,0 as service_user_sales_value_fp_rate,0 as service_user_profit_fp_rate
+union all   select '121310' as customer_no,'' as service_user_work_no,'' as service_user_name,'80941174' as work_no,'邓伟' as sales_name,'否' as is_part_time_service_manager,1 as salesperson_sales_value_fp_rate,1 as salesperson_profit_fp_rate,0 as service_user_sales_value_fp_rate,0 as service_user_profit_fp_rate
+union all   select '121318' as customer_no,'' as service_user_work_no,'' as service_user_name,'80956511' as work_no,'郭珍滟' as sales_name,'否' as is_part_time_service_manager,1 as salesperson_sales_value_fp_rate,1 as salesperson_profit_fp_rate,0 as service_user_sales_value_fp_rate,0 as service_user_profit_fp_rate
+union all   select '121340' as customer_no,'' as service_user_work_no,'' as service_user_name,'80960714' as work_no,'李远军' as sales_name,'否' as is_part_time_service_manager,1 as salesperson_sales_value_fp_rate,1 as salesperson_profit_fp_rate,0 as service_user_sales_value_fp_rate,0 as service_user_profit_fp_rate
+union all   select '121397' as customer_no,'' as service_user_work_no,'' as service_user_name,'81027274' as work_no,'李亚秋' as sales_name,'否' as is_part_time_service_manager,1 as salesperson_sales_value_fp_rate,1 as salesperson_profit_fp_rate,0 as service_user_sales_value_fp_rate,0 as service_user_profit_fp_rate
+union all   select '121415' as customer_no,'' as service_user_work_no,'' as service_user_name,'81039868' as work_no,'刘昱廷' as sales_name,'否' as is_part_time_service_manager,1 as salesperson_sales_value_fp_rate,1 as salesperson_profit_fp_rate,0 as service_user_sales_value_fp_rate,0 as service_user_profit_fp_rate
+union all   select '121436' as customer_no,'' as service_user_work_no,'' as service_user_name,'80929962' as work_no,'李宏方' as sales_name,'否' as is_part_time_service_manager,1 as salesperson_sales_value_fp_rate,1 as salesperson_profit_fp_rate,0 as service_user_sales_value_fp_rate,0 as service_user_profit_fp_rate
+union all   select '121627' as customer_no,'' as service_user_work_no,'' as service_user_name,'80960714' as work_no,'李远军' as sales_name,'否' as is_part_time_service_manager,1 as salesperson_sales_value_fp_rate,1 as salesperson_profit_fp_rate,0 as service_user_sales_value_fp_rate,0 as service_user_profit_fp_rate
+union all   select '121771' as customer_no,'' as service_user_work_no,'' as service_user_name,'80929962' as work_no,'李宏方' as sales_name,'否' as is_part_time_service_manager,1 as salesperson_sales_value_fp_rate,1 as salesperson_profit_fp_rate,0 as service_user_sales_value_fp_rate,0 as service_user_profit_fp_rate
+union all   select '121870' as customer_no,'' as service_user_work_no,'' as service_user_name,'81125246' as work_no,'邓金龙' as sales_name,'否' as is_part_time_service_manager,1 as salesperson_sales_value_fp_rate,1 as salesperson_profit_fp_rate,0 as service_user_sales_value_fp_rate,0 as service_user_profit_fp_rate
+union all   select '122011' as customer_no,'' as service_user_work_no,'' as service_user_name,'80887610' as work_no,'杨佐' as sales_name,'否' as is_part_time_service_manager,1 as salesperson_sales_value_fp_rate,1 as salesperson_profit_fp_rate,0 as service_user_sales_value_fp_rate,0 as service_user_profit_fp_rate
+union all   select '122052' as customer_no,'' as service_user_work_no,'' as service_user_name,'81039868' as work_no,'刘昱廷' as sales_name,'否' as is_part_time_service_manager,1 as salesperson_sales_value_fp_rate,1 as salesperson_profit_fp_rate,0 as service_user_sales_value_fp_rate,0 as service_user_profit_fp_rate
+union all   select '122082' as customer_no,'' as service_user_work_no,'' as service_user_name,'80887610' as work_no,'杨佐' as sales_name,'否' as is_part_time_service_manager,1 as salesperson_sales_value_fp_rate,1 as salesperson_profit_fp_rate,0 as service_user_sales_value_fp_rate,0 as service_user_profit_fp_rate
+union all   select '122087' as customer_no,'' as service_user_work_no,'' as service_user_name,'80886777' as work_no,'张意' as sales_name,'否' as is_part_time_service_manager,1 as salesperson_sales_value_fp_rate,1 as salesperson_profit_fp_rate,0 as service_user_sales_value_fp_rate,0 as service_user_profit_fp_rate
+union all   select '122095' as customer_no,'' as service_user_work_no,'' as service_user_name,'80929962' as work_no,'李宏方' as sales_name,'否' as is_part_time_service_manager,1 as salesperson_sales_value_fp_rate,1 as salesperson_profit_fp_rate,0 as service_user_sales_value_fp_rate,0 as service_user_profit_fp_rate
+union all   select '122129' as customer_no,'' as service_user_work_no,'' as service_user_name,'80887610' as work_no,'杨佐' as sales_name,'否' as is_part_time_service_manager,1 as salesperson_sales_value_fp_rate,1 as salesperson_profit_fp_rate,0 as service_user_sales_value_fp_rate,0 as service_user_profit_fp_rate
+union all   select '122170' as customer_no,'' as service_user_work_no,'' as service_user_name,'80956511' as work_no,'郭珍滟' as sales_name,'否' as is_part_time_service_manager,1 as salesperson_sales_value_fp_rate,1 as salesperson_profit_fp_rate,0 as service_user_sales_value_fp_rate,0 as service_user_profit_fp_rate
+union all   select '122176' as customer_no,'' as service_user_work_no,'' as service_user_name,'80941174' as work_no,'邓伟' as sales_name,'否' as is_part_time_service_manager,1 as salesperson_sales_value_fp_rate,1 as salesperson_profit_fp_rate,0 as service_user_sales_value_fp_rate,0 as service_user_profit_fp_rate
+union all   select '122224' as customer_no,'' as service_user_work_no,'' as service_user_name,'80941174' as work_no,'邓伟' as sales_name,'否' as is_part_time_service_manager,1 as salesperson_sales_value_fp_rate,1 as salesperson_profit_fp_rate,0 as service_user_sales_value_fp_rate,0 as service_user_profit_fp_rate
+union all   select '122238' as customer_no,'' as service_user_work_no,'' as service_user_name,'81027274' as work_no,'李亚秋' as sales_name,'否' as is_part_time_service_manager,1 as salesperson_sales_value_fp_rate,1 as salesperson_profit_fp_rate,0 as service_user_sales_value_fp_rate,0 as service_user_profit_fp_rate
+union all   select '122284' as customer_no,'' as service_user_work_no,'' as service_user_name,'81125246' as work_no,'邓金龙' as sales_name,'否' as is_part_time_service_manager,1 as salesperson_sales_value_fp_rate,1 as salesperson_profit_fp_rate,0 as service_user_sales_value_fp_rate,0 as service_user_profit_fp_rate
+union all   select '122334' as customer_no,'80926168' as service_user_work_no,'张全伟' as service_user_name,'80926168' as work_no,'张全伟' as sales_name,'是' as is_part_time_service_manager,0 as salesperson_sales_value_fp_rate,0 as salesperson_profit_fp_rate,0.3 as service_user_sales_value_fp_rate,0.5 as service_user_profit_fp_rate
+union all   select '122433' as customer_no,'' as service_user_work_no,'' as service_user_name,'80887610' as work_no,'杨佐' as sales_name,'否' as is_part_time_service_manager,1 as salesperson_sales_value_fp_rate,1 as salesperson_profit_fp_rate,0 as service_user_sales_value_fp_rate,0 as service_user_profit_fp_rate
+union all   select '122487' as customer_no,'' as service_user_work_no,'' as service_user_name,'81125246' as work_no,'邓金龙' as sales_name,'否' as is_part_time_service_manager,1 as salesperson_sales_value_fp_rate,1 as salesperson_profit_fp_rate,0 as service_user_sales_value_fp_rate,0 as service_user_profit_fp_rate
+union all   select '122509' as customer_no,'' as service_user_work_no,'' as service_user_name,'81156848' as work_no,'龚明瑶' as sales_name,'否' as is_part_time_service_manager,1 as salesperson_sales_value_fp_rate,1 as salesperson_profit_fp_rate,0 as service_user_sales_value_fp_rate,0 as service_user_profit_fp_rate
+union all   select '122532' as customer_no,'' as service_user_work_no,'' as service_user_name,'80878413' as work_no,'欧启' as sales_name,'否' as is_part_time_service_manager,1 as salesperson_sales_value_fp_rate,1 as salesperson_profit_fp_rate,0 as service_user_sales_value_fp_rate,0 as service_user_profit_fp_rate
+union all   select '122606' as customer_no,'' as service_user_work_no,'' as service_user_name,'80878413' as work_no,'欧启' as sales_name,'否' as is_part_time_service_manager,1 as salesperson_sales_value_fp_rate,1 as salesperson_profit_fp_rate,0 as service_user_sales_value_fp_rate,0 as service_user_profit_fp_rate
+union all   select '122672' as customer_no,'' as service_user_work_no,'' as service_user_name,'80941174' as work_no,'邓伟' as sales_name,'否' as is_part_time_service_manager,1 as salesperson_sales_value_fp_rate,1 as salesperson_profit_fp_rate,0 as service_user_sales_value_fp_rate,0 as service_user_profit_fp_rate
+union all   select '122730' as customer_no,'' as service_user_work_no,'' as service_user_name,'81039868' as work_no,'刘昱廷' as sales_name,'否' as is_part_time_service_manager,1 as salesperson_sales_value_fp_rate,1 as salesperson_profit_fp_rate,0 as service_user_sales_value_fp_rate,0 as service_user_profit_fp_rate
+union all   select '122749' as customer_no,'' as service_user_work_no,'' as service_user_name,'80941174' as work_no,'邓伟' as sales_name,'否' as is_part_time_service_manager,1 as salesperson_sales_value_fp_rate,1 as salesperson_profit_fp_rate,0 as service_user_sales_value_fp_rate,0 as service_user_profit_fp_rate
+union all   select '122895' as customer_no,'80619984' as service_user_work_no,'翟敏' as service_user_name,'80619984' as work_no,'翟敏' as sales_name,'是' as is_part_time_service_manager,0 as salesperson_sales_value_fp_rate,0 as salesperson_profit_fp_rate,0.3 as service_user_sales_value_fp_rate,0.5 as service_user_profit_fp_rate
+union all   select '122916' as customer_no,'' as service_user_work_no,'' as service_user_name,'80929962' as work_no,'李宏方' as sales_name,'否' as is_part_time_service_manager,1 as salesperson_sales_value_fp_rate,1 as salesperson_profit_fp_rate,0 as service_user_sales_value_fp_rate,0 as service_user_profit_fp_rate
+union all   select '122976' as customer_no,'' as service_user_work_no,'' as service_user_name,'81156848' as work_no,'龚明瑶' as sales_name,'否' as is_part_time_service_manager,1 as salesperson_sales_value_fp_rate,1 as salesperson_profit_fp_rate,0 as service_user_sales_value_fp_rate,0 as service_user_profit_fp_rate
+union all   select '122983' as customer_no,'' as service_user_work_no,'' as service_user_name,'81125246' as work_no,'邓金龙' as sales_name,'否' as is_part_time_service_manager,1 as salesperson_sales_value_fp_rate,1 as salesperson_profit_fp_rate,0 as service_user_sales_value_fp_rate,0 as service_user_profit_fp_rate
+union all   select '123025' as customer_no,'' as service_user_work_no,'' as service_user_name,'80941174' as work_no,'邓伟' as sales_name,'否' as is_part_time_service_manager,1 as salesperson_sales_value_fp_rate,1 as salesperson_profit_fp_rate,0 as service_user_sales_value_fp_rate,0 as service_user_profit_fp_rate
+union all   select '123031' as customer_no,'' as service_user_work_no,'' as service_user_name,'81027274' as work_no,'李亚秋' as sales_name,'否' as is_part_time_service_manager,1 as salesperson_sales_value_fp_rate,1 as salesperson_profit_fp_rate,0 as service_user_sales_value_fp_rate,0 as service_user_profit_fp_rate
+union all   select '123278' as customer_no,'' as service_user_work_no,'' as service_user_name,'80902387' as work_no,'张秋菊' as sales_name,'否' as is_part_time_service_manager,1 as salesperson_sales_value_fp_rate,1 as salesperson_profit_fp_rate,0 as service_user_sales_value_fp_rate,0 as service_user_profit_fp_rate
+union all   select '123340' as customer_no,'' as service_user_work_no,'' as service_user_name,'80941174' as work_no,'邓伟' as sales_name,'否' as is_part_time_service_manager,1 as salesperson_sales_value_fp_rate,1 as salesperson_profit_fp_rate,0 as service_user_sales_value_fp_rate,0 as service_user_profit_fp_rate
+union all   select '123527' as customer_no,'' as service_user_work_no,'' as service_user_name,'81125246' as work_no,'邓金龙' as sales_name,'否' as is_part_time_service_manager,1 as salesperson_sales_value_fp_rate,1 as salesperson_profit_fp_rate,0 as service_user_sales_value_fp_rate,0 as service_user_profit_fp_rate
+union all   select '123528' as customer_no,'' as service_user_work_no,'' as service_user_name,'80960714' as work_no,'李远军' as sales_name,'否' as is_part_time_service_manager,1 as salesperson_sales_value_fp_rate,1 as salesperson_profit_fp_rate,0 as service_user_sales_value_fp_rate,0 as service_user_profit_fp_rate
+union all   select '123536' as customer_no,'' as service_user_work_no,'' as service_user_name,'81125246' as work_no,'邓金龙' as sales_name,'否' as is_part_time_service_manager,1 as salesperson_sales_value_fp_rate,1 as salesperson_profit_fp_rate,0 as service_user_sales_value_fp_rate,0 as service_user_profit_fp_rate
+union all   select '123615' as customer_no,'' as service_user_work_no,'' as service_user_name,'81156848' as work_no,'龚明瑶' as sales_name,'否' as is_part_time_service_manager,1 as salesperson_sales_value_fp_rate,1 as salesperson_profit_fp_rate,0 as service_user_sales_value_fp_rate,0 as service_user_profit_fp_rate
+union all   select '123745' as customer_no,'81056210' as service_user_work_no,'龚春鸿' as service_user_name,'81056210' as work_no,'龚春鸿' as sales_name,'是' as is_part_time_service_manager,0 as salesperson_sales_value_fp_rate,0 as salesperson_profit_fp_rate,0.3 as service_user_sales_value_fp_rate,0.5 as service_user_profit_fp_rate
+union all   select '123824' as customer_no,'' as service_user_work_no,'' as service_user_name,'80941174' as work_no,'邓伟' as sales_name,'否' as is_part_time_service_manager,1 as salesperson_sales_value_fp_rate,1 as salesperson_profit_fp_rate,0 as service_user_sales_value_fp_rate,0 as service_user_profit_fp_rate
+union all   select '123832' as customer_no,'' as service_user_work_no,'' as service_user_name,'81125246' as work_no,'邓金龙' as sales_name,'否' as is_part_time_service_manager,1 as salesperson_sales_value_fp_rate,1 as salesperson_profit_fp_rate,0 as service_user_sales_value_fp_rate,0 as service_user_profit_fp_rate
+union all   select '124029' as customer_no,'' as service_user_work_no,'' as service_user_name,'80895095' as work_no,'罗泽剑' as sales_name,'否' as is_part_time_service_manager,1 as salesperson_sales_value_fp_rate,1 as salesperson_profit_fp_rate,0 as service_user_sales_value_fp_rate,0 as service_user_profit_fp_rate
+union all   select '124039' as customer_no,'' as service_user_work_no,'' as service_user_name,'81129853' as work_no,'卜双淇' as sales_name,'否' as is_part_time_service_manager,1 as salesperson_sales_value_fp_rate,1 as salesperson_profit_fp_rate,0 as service_user_sales_value_fp_rate,0 as service_user_profit_fp_rate
+union all   select '124467' as customer_no,'80619984' as service_user_work_no,'翟敏' as service_user_name,'80619984' as work_no,'翟敏' as sales_name,'是' as is_part_time_service_manager,0 as salesperson_sales_value_fp_rate,0 as salesperson_profit_fp_rate,0.3 as service_user_sales_value_fp_rate,0.5 as service_user_profit_fp_rate
+union all   select '124577' as customer_no,'80619984' as service_user_work_no,'翟敏' as service_user_name,'80619984' as work_no,'翟敏' as sales_name,'是' as is_part_time_service_manager,0 as salesperson_sales_value_fp_rate,0 as salesperson_profit_fp_rate,0.3 as service_user_sales_value_fp_rate,0.5 as service_user_profit_fp_rate
+union all   select '124606' as customer_no,'80619984' as service_user_work_no,'翟敏' as service_user_name,'80619984' as work_no,'翟敏' as sales_name,'是' as is_part_time_service_manager,0 as salesperson_sales_value_fp_rate,0 as salesperson_profit_fp_rate,0.3 as service_user_sales_value_fp_rate,0.5 as service_user_profit_fp_rate
+union all   select '124638' as customer_no,'80619984' as service_user_work_no,'翟敏' as service_user_name,'80619984' as work_no,'翟敏' as sales_name,'是' as is_part_time_service_manager,0 as salesperson_sales_value_fp_rate,0 as salesperson_profit_fp_rate,0.3 as service_user_sales_value_fp_rate,0.5 as service_user_profit_fp_rate
+union all   select '124650' as customer_no,'80980977' as service_user_work_no,'黄小红' as service_user_name,'80980977' as work_no,'黄小红' as sales_name,'是' as is_part_time_service_manager,0 as salesperson_sales_value_fp_rate,0 as salesperson_profit_fp_rate,0.3 as service_user_sales_value_fp_rate,0.5 as service_user_profit_fp_rate
+union all   select '124680' as customer_no,'' as service_user_work_no,'' as service_user_name,'81125246' as work_no,'邓金龙' as sales_name,'否' as is_part_time_service_manager,1 as salesperson_sales_value_fp_rate,1 as salesperson_profit_fp_rate,0 as service_user_sales_value_fp_rate,0 as service_user_profit_fp_rate
+union all   select '125058' as customer_no,'' as service_user_work_no,'' as service_user_name,'81156848' as work_no,'龚明瑶' as sales_name,'否' as is_part_time_service_manager,1 as salesperson_sales_value_fp_rate,1 as salesperson_profit_fp_rate,0 as service_user_sales_value_fp_rate,0 as service_user_profit_fp_rate
+union all   select '125089' as customer_no,'' as service_user_work_no,'' as service_user_name,'81039868' as work_no,'刘昱廷' as sales_name,'否' as is_part_time_service_manager,1 as salesperson_sales_value_fp_rate,1 as salesperson_profit_fp_rate,0 as service_user_sales_value_fp_rate,0 as service_user_profit_fp_rate
+union all   select '125146' as customer_no,'' as service_user_work_no,'' as service_user_name,'81156848' as work_no,'龚明瑶' as sales_name,'否' as is_part_time_service_manager,1 as salesperson_sales_value_fp_rate,1 as salesperson_profit_fp_rate,0 as service_user_sales_value_fp_rate,0 as service_user_profit_fp_rate
+union all   select '125931' as customer_no,'81056210' as service_user_work_no,'龚春鸿' as service_user_name,'81056210' as work_no,'龚春鸿' as sales_name,'是' as is_part_time_service_manager,0 as salesperson_sales_value_fp_rate,0 as salesperson_profit_fp_rate,0.3 as service_user_sales_value_fp_rate,0.5 as service_user_profit_fp_rate
+union all   select '123035' as customer_no,'' as service_user_work_no,'' as service_user_name,'81099363' as work_no,'南召雪' as sales_name,'否' as is_part_time_service_manager,0.7 as salesperson_sales_value_fp_rate,0.5 as salesperson_profit_fp_rate,0 as service_user_sales_value_fp_rate,0 as service_user_profit_fp_rate
+union all   select '111764' as customer_no,'' as service_user_work_no,'' as service_user_name,'81014929' as work_no,'张路平' as sales_name,'否' as is_part_time_service_manager,0.3 as salesperson_sales_value_fp_rate,0.5 as salesperson_profit_fp_rate,0 as service_user_sales_value_fp_rate,0 as service_user_profit_fp_rate
+union all   select '112285' as customer_no,'' as service_user_work_no,'' as service_user_name,'81014929' as work_no,'张路平' as sales_name,'否' as is_part_time_service_manager,0.3 as salesperson_sales_value_fp_rate,0.5 as salesperson_profit_fp_rate,0 as service_user_sales_value_fp_rate,0 as service_user_profit_fp_rate
+union all   select '112681' as customer_no,'' as service_user_work_no,'' as service_user_name,'81014929' as work_no,'张路平' as sales_name,'否' as is_part_time_service_manager,0.3 as salesperson_sales_value_fp_rate,0.5 as salesperson_profit_fp_rate,0 as service_user_sales_value_fp_rate,0 as service_user_profit_fp_rate
+union all   select '112914' as customer_no,'' as service_user_work_no,'' as service_user_name,'81014929' as work_no,'张路平' as sales_name,'否' as is_part_time_service_manager,0.3 as salesperson_sales_value_fp_rate,0.5 as salesperson_profit_fp_rate,0 as service_user_sales_value_fp_rate,0 as service_user_profit_fp_rate
+union all   select '113015' as customer_no,'' as service_user_work_no,'' as service_user_name,'81014929' as work_no,'张路平' as sales_name,'否' as is_part_time_service_manager,0.3 as salesperson_sales_value_fp_rate,0.5 as salesperson_profit_fp_rate,0 as service_user_sales_value_fp_rate,0 as service_user_profit_fp_rate
+union all   select '113394' as customer_no,'' as service_user_work_no,'' as service_user_name,'81014929' as work_no,'张路平' as sales_name,'否' as is_part_time_service_manager,0.3 as salesperson_sales_value_fp_rate,0.5 as salesperson_profit_fp_rate,0 as service_user_sales_value_fp_rate,0 as service_user_profit_fp_rate
+union all   select '114650' as customer_no,'' as service_user_work_no,'' as service_user_name,'81014929' as work_no,'张路平' as sales_name,'否' as is_part_time_service_manager,0.3 as salesperson_sales_value_fp_rate,0.5 as salesperson_profit_fp_rate,0 as service_user_sales_value_fp_rate,0 as service_user_profit_fp_rate
+union all   select '114804' as customer_no,'' as service_user_work_no,'' as service_user_name,'81014929' as work_no,'张路平' as sales_name,'否' as is_part_time_service_manager,0.3 as salesperson_sales_value_fp_rate,0.5 as salesperson_profit_fp_rate,0 as service_user_sales_value_fp_rate,0 as service_user_profit_fp_rate
+union all   select '117311' as customer_no,'' as service_user_work_no,'' as service_user_name,'81014929' as work_no,'张路平' as sales_name,'否' as is_part_time_service_manager,0.3 as salesperson_sales_value_fp_rate,0.5 as salesperson_profit_fp_rate,0 as service_user_sales_value_fp_rate,0 as service_user_profit_fp_rate
+union all   select '118762' as customer_no,'' as service_user_work_no,'' as service_user_name,'81014929' as work_no,'张路平' as sales_name,'否' as is_part_time_service_manager,0.3 as salesperson_sales_value_fp_rate,0.5 as salesperson_profit_fp_rate,0 as service_user_sales_value_fp_rate,0 as service_user_profit_fp_rate
+union all   select '120495' as customer_no,'' as service_user_work_no,'' as service_user_name,'81014929' as work_no,'张路平' as sales_name,'否' as is_part_time_service_manager,0.3 as salesperson_sales_value_fp_rate,0.5 as salesperson_profit_fp_rate,0 as service_user_sales_value_fp_rate,0 as service_user_profit_fp_rate
+union all   select '125370' as customer_no,'' as service_user_work_no,'' as service_user_name,'81014929' as work_no,'张路平' as sales_name,'否' as is_part_time_service_manager,0.3 as salesperson_sales_value_fp_rate,0.5 as salesperson_profit_fp_rate,0 as service_user_sales_value_fp_rate,0 as service_user_profit_fp_rate
+union all   select '125647' as customer_no,'' as service_user_work_no,'' as service_user_name,'81014929' as work_no,'张路平' as sales_name,'否' as is_part_time_service_manager,0.3 as salesperson_sales_value_fp_rate,0.5 as salesperson_profit_fp_rate,0 as service_user_sales_value_fp_rate,0 as service_user_profit_fp_rate
+union all   select '125899' as customer_no,'' as service_user_work_no,'' as service_user_name,'81014929' as work_no,'张路平' as sales_name,'否' as is_part_time_service_manager,0.3 as salesperson_sales_value_fp_rate,0.5 as salesperson_profit_fp_rate,0 as service_user_sales_value_fp_rate,0 as service_user_profit_fp_rate
+union all   select '113059' as customer_no,'' as service_user_work_no,'' as service_user_name,'80793145' as work_no,'周彬彬' as sales_name,'否' as is_part_time_service_manager,0.7 as salesperson_sales_value_fp_rate,0.5 as salesperson_profit_fp_rate,0 as service_user_sales_value_fp_rate,0 as service_user_profit_fp_rate
+union all   select '102866' as customer_no,'' as service_user_work_no,'' as service_user_name,'81043405' as work_no,'魏桓' as sales_name,'是' as is_part_time_service_manager,0 as salesperson_sales_value_fp_rate,0 as salesperson_profit_fp_rate,0 as service_user_sales_value_fp_rate,0 as service_user_profit_fp_rate
+union all   select '123053' as customer_no,'81059113' as service_user_work_no,'林丽惠' as service_user_name,'81093307' as work_no,'黄少伟' as sales_name,'否' as is_part_time_service_manager,0.7 as salesperson_sales_value_fp_rate,0.5 as salesperson_profit_fp_rate,0.3 as service_user_sales_value_fp_rate,0.5 as service_user_profit_fp_rate
+union all   select '117884' as customer_no,'' as service_user_work_no,'' as service_user_name,'81113908' as work_no,'王雅婷' as sales_name,'是' as is_part_time_service_manager,0.3 as salesperson_sales_value_fp_rate,0.5 as salesperson_profit_fp_rate,0 as service_user_sales_value_fp_rate,0 as service_user_profit_fp_rate
+union all   select '105673' as customer_no,'' as service_user_work_no,'' as service_user_name,'81034648' as work_no,'李紫珊' as sales_name,'是' as is_part_time_service_manager,0.3 as salesperson_sales_value_fp_rate,0.5 as salesperson_profit_fp_rate,0 as service_user_sales_value_fp_rate,0 as service_user_profit_fp_rate
+union all   select '110807' as customer_no,'' as service_user_work_no,'' as service_user_name,'81034648' as work_no,'李紫珊' as sales_name,'是' as is_part_time_service_manager,0.3 as salesperson_sales_value_fp_rate,0.5 as salesperson_profit_fp_rate,0 as service_user_sales_value_fp_rate,0 as service_user_profit_fp_rate
+union all   select '116171' as customer_no,'' as service_user_work_no,'' as service_user_name,'81034648' as work_no,'李紫珊' as sales_name,'是' as is_part_time_service_manager,0.3 as salesperson_sales_value_fp_rate,0.5 as salesperson_profit_fp_rate,0 as service_user_sales_value_fp_rate,0 as service_user_profit_fp_rate
+union all   select '115252' as customer_no,'' as service_user_work_no,'' as service_user_name,'81034648' as work_no,'李紫珊' as sales_name,'是' as is_part_time_service_manager,0.3 as salesperson_sales_value_fp_rate,0.5 as salesperson_profit_fp_rate,0 as service_user_sales_value_fp_rate,0 as service_user_profit_fp_rate
+union all   select '115928' as customer_no,'' as service_user_work_no,'' as service_user_name,'81034648' as work_no,'李紫珊' as sales_name,'是' as is_part_time_service_manager,0.3 as salesperson_sales_value_fp_rate,0.5 as salesperson_profit_fp_rate,0 as service_user_sales_value_fp_rate,0 as service_user_profit_fp_rate
+union all   select '116714' as customer_no,'' as service_user_work_no,'' as service_user_name,'81034648' as work_no,'李紫珊' as sales_name,'是' as is_part_time_service_manager,0.3 as salesperson_sales_value_fp_rate,0.5 as salesperson_profit_fp_rate,0 as service_user_sales_value_fp_rate,0 as service_user_profit_fp_rate
+union all   select '116794' as customer_no,'' as service_user_work_no,'' as service_user_name,'81034648' as work_no,'李紫珊' as sales_name,'是' as is_part_time_service_manager,0.3 as salesperson_sales_value_fp_rate,0.5 as salesperson_profit_fp_rate,0 as service_user_sales_value_fp_rate,0 as service_user_profit_fp_rate
+union all   select '116835' as customer_no,'' as service_user_work_no,'' as service_user_name,'81034648' as work_no,'李紫珊' as sales_name,'是' as is_part_time_service_manager,0.3 as salesperson_sales_value_fp_rate,0.5 as salesperson_profit_fp_rate,0 as service_user_sales_value_fp_rate,0 as service_user_profit_fp_rate
+union all   select '117242' as customer_no,'' as service_user_work_no,'' as service_user_name,'81034648' as work_no,'李紫珊' as sales_name,'是' as is_part_time_service_manager,0.3 as salesperson_sales_value_fp_rate,0.5 as salesperson_profit_fp_rate,0 as service_user_sales_value_fp_rate,0 as service_user_profit_fp_rate
+union all   select '117223' as customer_no,'' as service_user_work_no,'' as service_user_name,'81034648' as work_no,'李紫珊' as sales_name,'是' as is_part_time_service_manager,0.3 as salesperson_sales_value_fp_rate,0.5 as salesperson_profit_fp_rate,0 as service_user_sales_value_fp_rate,0 as service_user_profit_fp_rate
+union all   select '117255' as customer_no,'' as service_user_work_no,'' as service_user_name,'81034648' as work_no,'李紫珊' as sales_name,'是' as is_part_time_service_manager,0.3 as salesperson_sales_value_fp_rate,0.5 as salesperson_profit_fp_rate,0 as service_user_sales_value_fp_rate,0 as service_user_profit_fp_rate
+union all   select '117929' as customer_no,'' as service_user_work_no,'' as service_user_name,'81034648' as work_no,'李紫珊' as sales_name,'是' as is_part_time_service_manager,0.3 as salesperson_sales_value_fp_rate,0.5 as salesperson_profit_fp_rate,0 as service_user_sales_value_fp_rate,0 as service_user_profit_fp_rate
+union all   select '119100' as customer_no,'' as service_user_work_no,'' as service_user_name,'81034648' as work_no,'李紫珊' as sales_name,'是' as is_part_time_service_manager,0.3 as salesperson_sales_value_fp_rate,0.5 as salesperson_profit_fp_rate,0 as service_user_sales_value_fp_rate,0 as service_user_profit_fp_rate
+union all   select '119833' as customer_no,'' as service_user_work_no,'' as service_user_name,'81079932' as work_no,'曹焕标' as sales_name,'是' as is_part_time_service_manager,0.3 as salesperson_sales_value_fp_rate,0.5 as salesperson_profit_fp_rate,0 as service_user_sales_value_fp_rate,0 as service_user_profit_fp_rate
+union all   select '120121' as customer_no,'' as service_user_work_no,'' as service_user_name,'81034648' as work_no,'李紫珊' as sales_name,'是' as is_part_time_service_manager,0.3 as salesperson_sales_value_fp_rate,0.5 as salesperson_profit_fp_rate,0 as service_user_sales_value_fp_rate,0 as service_user_profit_fp_rate
+union all   select '120360' as customer_no,'' as service_user_work_no,'' as service_user_name,'81034648' as work_no,'李紫珊' as sales_name,'是' as is_part_time_service_manager,0.3 as salesperson_sales_value_fp_rate,0.5 as salesperson_profit_fp_rate,0 as service_user_sales_value_fp_rate,0 as service_user_profit_fp_rate
+union all   select '121796' as customer_no,'' as service_user_work_no,'' as service_user_name,'81119013' as work_no,'赖俊杰' as sales_name,'是' as is_part_time_service_manager,0.3 as salesperson_sales_value_fp_rate,0.5 as salesperson_profit_fp_rate,0 as service_user_sales_value_fp_rate,0 as service_user_profit_fp_rate
+union all   select '105908' as customer_no,'' as service_user_work_no,'' as service_user_name,'80913079' as work_no,'张宇' as sales_name,'否' as is_part_time_service_manager,1 as salesperson_sales_value_fp_rate,1 as salesperson_profit_fp_rate,0 as service_user_sales_value_fp_rate,0 as service_user_profit_fp_rate
+union all   select '107260' as customer_no,'' as service_user_work_no,'' as service_user_name,'80913079' as work_no,'张宇' as sales_name,'否' as is_part_time_service_manager,1 as salesperson_sales_value_fp_rate,1 as salesperson_profit_fp_rate,0 as service_user_sales_value_fp_rate,0 as service_user_profit_fp_rate
+union all   select '113096' as customer_no,'' as service_user_work_no,'' as service_user_name,'80913079' as work_no,'张宇' as sales_name,'否' as is_part_time_service_manager,1 as salesperson_sales_value_fp_rate,1 as salesperson_profit_fp_rate,0 as service_user_sales_value_fp_rate,0 as service_user_profit_fp_rate
+union all   select '115302' as customer_no,'' as service_user_work_no,'' as service_user_name,'80913079' as work_no,'张宇' as sales_name,'否' as is_part_time_service_manager,1 as salesperson_sales_value_fp_rate,1 as salesperson_profit_fp_rate,0 as service_user_sales_value_fp_rate,0 as service_user_profit_fp_rate
+union all   select '121088' as customer_no,'' as service_user_work_no,'' as service_user_name,'80913079' as work_no,'张宇' as sales_name,'否' as is_part_time_service_manager,1 as salesperson_sales_value_fp_rate,1 as salesperson_profit_fp_rate,0 as service_user_sales_value_fp_rate,0 as service_user_profit_fp_rate
+union all   select '123896' as customer_no,'81052035' as service_user_work_no,'袁成臣' as service_user_name,'80913079' as work_no,'张宇' as sales_name,'否' as is_part_time_service_manager,0.7 as salesperson_sales_value_fp_rate,0.5 as salesperson_profit_fp_rate,0.3 as service_user_sales_value_fp_rate,0.5 as service_user_profit_fp_rate
+union all   select '105761' as customer_no,'' as service_user_work_no,'' as service_user_name,'81084752' as work_no,'张鹏' as sales_name,'否' as is_part_time_service_manager,1 as salesperson_sales_value_fp_rate,1 as salesperson_profit_fp_rate,0 as service_user_sales_value_fp_rate,0 as service_user_profit_fp_rate
+union all   select '118582' as customer_no,'' as service_user_work_no,'' as service_user_name,'81084752' as work_no,'张鹏' as sales_name,'否' as is_part_time_service_manager,1 as salesperson_sales_value_fp_rate,1 as salesperson_profit_fp_rate,0 as service_user_sales_value_fp_rate,0 as service_user_profit_fp_rate
+union all   select '121128' as customer_no,'' as service_user_work_no,'' as service_user_name,'81084752' as work_no,'张鹏' as sales_name,'否' as is_part_time_service_manager,1 as salesperson_sales_value_fp_rate,1 as salesperson_profit_fp_rate,0 as service_user_sales_value_fp_rate,0 as service_user_profit_fp_rate
+union all   select '123365' as customer_no,'' as service_user_work_no,'' as service_user_name,'81084752' as work_no,'张鹏' as sales_name,'否' as is_part_time_service_manager,1 as salesperson_sales_value_fp_rate,1 as salesperson_profit_fp_rate,0 as service_user_sales_value_fp_rate,0 as service_user_profit_fp_rate
+union all   select '125663' as customer_no,'' as service_user_work_no,'' as service_user_name,'81084752' as work_no,'张鹏' as sales_name,'否' as is_part_time_service_manager,1 as salesperson_sales_value_fp_rate,1 as salesperson_profit_fp_rate,0 as service_user_sales_value_fp_rate,0 as service_user_profit_fp_rate
+union all   select '105754' as customer_no,'' as service_user_work_no,'' as service_user_name,'81052035' as work_no,'袁成臣' as sales_name,'是' as is_part_time_service_manager,0.3 as salesperson_sales_value_fp_rate,0.5 as salesperson_profit_fp_rate,0 as service_user_sales_value_fp_rate,0 as service_user_profit_fp_rate
+union all   select '106247' as customer_no,'' as service_user_work_no,'' as service_user_name,'81052035' as work_no,'袁成臣' as sales_name,'是' as is_part_time_service_manager,0.3 as salesperson_sales_value_fp_rate,0.5 as salesperson_profit_fp_rate,0 as service_user_sales_value_fp_rate,0 as service_user_profit_fp_rate
+union all   select '107337' as customer_no,'' as service_user_work_no,'' as service_user_name,'81052035' as work_no,'袁成臣' as sales_name,'是' as is_part_time_service_manager,0.3 as salesperson_sales_value_fp_rate,0.5 as salesperson_profit_fp_rate,0 as service_user_sales_value_fp_rate,0 as service_user_profit_fp_rate
+union all   select '113501' as customer_no,'' as service_user_work_no,'' as service_user_name,'81052035' as work_no,'袁成臣' as sales_name,'是' as is_part_time_service_manager,0.3 as salesperson_sales_value_fp_rate,0.5 as salesperson_profit_fp_rate,0 as service_user_sales_value_fp_rate,0 as service_user_profit_fp_rate
+union all   select '116639' as customer_no,'' as service_user_work_no,'' as service_user_name,'81052035' as work_no,'袁成臣' as sales_name,'是' as is_part_time_service_manager,1 as salesperson_sales_value_fp_rate,1 as salesperson_profit_fp_rate,0 as service_user_sales_value_fp_rate,0 as service_user_profit_fp_rate
+union all   select '116932' as customer_no,'' as service_user_work_no,'' as service_user_name,'81052035' as work_no,'袁成臣' as sales_name,'是' as is_part_time_service_manager,0.3 as salesperson_sales_value_fp_rate,0.5 as salesperson_profit_fp_rate,0 as service_user_sales_value_fp_rate,0 as service_user_profit_fp_rate
+union all   select '117304' as customer_no,'' as service_user_work_no,'' as service_user_name,'81052035' as work_no,'袁成臣' as sales_name,'是' as is_part_time_service_manager,1 as salesperson_sales_value_fp_rate,1 as salesperson_profit_fp_rate,0 as service_user_sales_value_fp_rate,0 as service_user_profit_fp_rate
+union all   select '117605' as customer_no,'' as service_user_work_no,'' as service_user_name,'81052035' as work_no,'袁成臣' as sales_name,'是' as is_part_time_service_manager,1 as salesperson_sales_value_fp_rate,1 as salesperson_profit_fp_rate,0 as service_user_sales_value_fp_rate,0 as service_user_profit_fp_rate
+union all   select '120830' as customer_no,'' as service_user_work_no,'' as service_user_name,'81052035' as work_no,'袁成臣' as sales_name,'是' as is_part_time_service_manager,0.3 as salesperson_sales_value_fp_rate,0.5 as salesperson_profit_fp_rate,0 as service_user_sales_value_fp_rate,0 as service_user_profit_fp_rate
+union all   select '122837' as customer_no,'' as service_user_work_no,'' as service_user_name,'81052035' as work_no,'袁成臣' as sales_name,'是' as is_part_time_service_manager,0.3 as salesperson_sales_value_fp_rate,0.5 as salesperson_profit_fp_rate,0 as service_user_sales_value_fp_rate,0 as service_user_profit_fp_rate
+union all   select '104623' as customer_no,'' as service_user_work_no,'' as service_user_name,'80913408' as work_no,'杨丹丹' as sales_name,'否' as is_part_time_service_manager,1 as salesperson_sales_value_fp_rate,1 as salesperson_profit_fp_rate,0 as service_user_sales_value_fp_rate,0 as service_user_profit_fp_rate
+union all   select '113695' as customer_no,'' as service_user_work_no,'' as service_user_name,'80913408' as work_no,'杨丹丹' as sales_name,'否' as is_part_time_service_manager,1 as salesperson_sales_value_fp_rate,1 as salesperson_profit_fp_rate,0 as service_user_sales_value_fp_rate,0 as service_user_profit_fp_rate
+union all   select '123299' as customer_no,'' as service_user_work_no,'' as service_user_name,'80913408' as work_no,'杨丹丹' as sales_name,'否' as is_part_time_service_manager,1 as salesperson_sales_value_fp_rate,1 as salesperson_profit_fp_rate,0 as service_user_sales_value_fp_rate,0 as service_user_profit_fp_rate
+union all   select '109435' as customer_no,'' as service_user_work_no,'' as service_user_name,'80160212' as work_no,'徐芸' as sales_name,'否' as is_part_time_service_manager,1 as salesperson_sales_value_fp_rate,1 as salesperson_profit_fp_rate,0 as service_user_sales_value_fp_rate,0 as service_user_profit_fp_rate
+union all   select '111255' as customer_no,'' as service_user_work_no,'' as service_user_name,'80160212' as work_no,'徐芸' as sales_name,'否' as is_part_time_service_manager,1 as salesperson_sales_value_fp_rate,1 as salesperson_profit_fp_rate,0 as service_user_sales_value_fp_rate,0 as service_user_profit_fp_rate
+union all   select '116527' as customer_no,'' as service_user_work_no,'' as service_user_name,'80160212' as work_no,'徐芸' as sales_name,'否' as is_part_time_service_manager,1 as salesperson_sales_value_fp_rate,1 as salesperson_profit_fp_rate,0 as service_user_sales_value_fp_rate,0 as service_user_profit_fp_rate
+union all   select '123279' as customer_no,'' as service_user_work_no,'' as service_user_name,'80160212' as work_no,'徐芸' as sales_name,'否' as is_part_time_service_manager,1 as salesperson_sales_value_fp_rate,1 as salesperson_profit_fp_rate,0 as service_user_sales_value_fp_rate,0 as service_user_profit_fp_rate
+union all   select '124046' as customer_no,'' as service_user_work_no,'' as service_user_name,'80160212' as work_no,'徐芸' as sales_name,'否' as is_part_time_service_manager,1 as salesperson_sales_value_fp_rate,1 as salesperson_profit_fp_rate,0 as service_user_sales_value_fp_rate,0 as service_user_profit_fp_rate
+union all   select '105879' as customer_no,'' as service_user_work_no,'' as service_user_name,'80965415' as work_no,'王旭' as sales_name,'是' as is_part_time_service_manager,0.3 as salesperson_sales_value_fp_rate,0.5 as salesperson_profit_fp_rate,0 as service_user_sales_value_fp_rate,0 as service_user_profit_fp_rate
+union all   select '107553' as customer_no,'' as service_user_work_no,'' as service_user_name,'80965415' as work_no,'王旭' as sales_name,'是' as is_part_time_service_manager,0.3 as salesperson_sales_value_fp_rate,0.5 as salesperson_profit_fp_rate,0 as service_user_sales_value_fp_rate,0 as service_user_profit_fp_rate
+union all   select '107682' as customer_no,'' as service_user_work_no,'' as service_user_name,'80965415' as work_no,'王旭' as sales_name,'是' as is_part_time_service_manager,0.3 as salesperson_sales_value_fp_rate,0.5 as salesperson_profit_fp_rate,0 as service_user_sales_value_fp_rate,0 as service_user_profit_fp_rate
+union all   select '111301' as customer_no,'' as service_user_work_no,'' as service_user_name,'80965415' as work_no,'王旭' as sales_name,'是' as is_part_time_service_manager,0.3 as salesperson_sales_value_fp_rate,0.5 as salesperson_profit_fp_rate,0 as service_user_sales_value_fp_rate,0 as service_user_profit_fp_rate
+union all   select '111520' as customer_no,'' as service_user_work_no,'' as service_user_name,'80965415' as work_no,'王旭' as sales_name,'是' as is_part_time_service_manager,0.3 as salesperson_sales_value_fp_rate,0.5 as salesperson_profit_fp_rate,0 as service_user_sales_value_fp_rate,0 as service_user_profit_fp_rate
+union all   select '112181' as customer_no,'' as service_user_work_no,'' as service_user_name,'80965415' as work_no,'王旭' as sales_name,'是' as is_part_time_service_manager,1 as salesperson_sales_value_fp_rate,1 as salesperson_profit_fp_rate,0 as service_user_sales_value_fp_rate,0 as service_user_profit_fp_rate
+union all   select '113641' as customer_no,'' as service_user_work_no,'' as service_user_name,'80965415' as work_no,'王旭' as sales_name,'是' as is_part_time_service_manager,1 as salesperson_sales_value_fp_rate,1 as salesperson_profit_fp_rate,0 as service_user_sales_value_fp_rate,0 as service_user_profit_fp_rate
+union all   select '117119' as customer_no,'' as service_user_work_no,'' as service_user_name,'80965415' as work_no,'王旭' as sales_name,'是' as is_part_time_service_manager,1 as salesperson_sales_value_fp_rate,1 as salesperson_profit_fp_rate,0 as service_user_sales_value_fp_rate,0 as service_user_profit_fp_rate
+union all   select '104402' as customer_no,'' as service_user_work_no,'' as service_user_name,'80890403' as work_no,'宛小娟' as sales_name,'是' as is_part_time_service_manager,0.3 as salesperson_sales_value_fp_rate,0.5 as salesperson_profit_fp_rate,0 as service_user_sales_value_fp_rate,0 as service_user_profit_fp_rate
+union all   select '104885' as customer_no,'' as service_user_work_no,'' as service_user_name,'80890403' as work_no,'宛小娟' as sales_name,'是' as is_part_time_service_manager,0.3 as salesperson_sales_value_fp_rate,0.5 as salesperson_profit_fp_rate,0 as service_user_sales_value_fp_rate,0 as service_user_profit_fp_rate
+union all   select '107415' as customer_no,'' as service_user_work_no,'' as service_user_name,'80890403' as work_no,'宛小娟' as sales_name,'是' as is_part_time_service_manager,0.3 as salesperson_sales_value_fp_rate,0.5 as salesperson_profit_fp_rate,0 as service_user_sales_value_fp_rate,0 as service_user_profit_fp_rate
+union all   select '121452' as customer_no,'' as service_user_work_no,'' as service_user_name,'80890403' as work_no,'宛小娟' as sales_name,'是' as is_part_time_service_manager,0.3 as salesperson_sales_value_fp_rate,0.5 as salesperson_profit_fp_rate,0 as service_user_sales_value_fp_rate,0 as service_user_profit_fp_rate
+union all   select '115883' as customer_no,'80890405' as service_user_work_no,'王世卿' as service_user_name,'80943162' as work_no,'宋苗' as sales_name,'否' as is_part_time_service_manager,0.7 as salesperson_sales_value_fp_rate,0.5 as salesperson_profit_fp_rate,0.3 as service_user_sales_value_fp_rate,0.5 as service_user_profit_fp_rate
+union all   select '116915' as customer_no,'' as service_user_work_no,'' as service_user_name,'80943162' as work_no,'宋苗' as sales_name,'否' as is_part_time_service_manager,1 as salesperson_sales_value_fp_rate,1 as salesperson_profit_fp_rate,0 as service_user_sales_value_fp_rate,0 as service_user_profit_fp_rate
+union all   select '122655' as customer_no,'' as service_user_work_no,'' as service_user_name,'80943162' as work_no,'宋苗' as sales_name,'否' as is_part_time_service_manager,1 as salesperson_sales_value_fp_rate,1 as salesperson_profit_fp_rate,0 as service_user_sales_value_fp_rate,0 as service_user_profit_fp_rate
+union all   select '118458' as customer_no,'' as service_user_work_no,'' as service_user_name,'81089337' as work_no,'葛香俊' as sales_name,'否' as is_part_time_service_manager,1 as salesperson_sales_value_fp_rate,1 as salesperson_profit_fp_rate,0 as service_user_sales_value_fp_rate,0 as service_user_profit_fp_rate
+union all   select '119992' as customer_no,'' as service_user_work_no,'' as service_user_name,'81089337' as work_no,'葛香俊' as sales_name,'否' as is_part_time_service_manager,1 as salesperson_sales_value_fp_rate,1 as salesperson_profit_fp_rate,0 as service_user_sales_value_fp_rate,0 as service_user_profit_fp_rate
+union all   select '121300' as customer_no,'' as service_user_work_no,'' as service_user_name,'81089337' as work_no,'葛香俊' as sales_name,'否' as is_part_time_service_manager,1 as salesperson_sales_value_fp_rate,1 as salesperson_profit_fp_rate,0 as service_user_sales_value_fp_rate,0 as service_user_profit_fp_rate
+union all   select '122152' as customer_no,'' as service_user_work_no,'' as service_user_name,'81089337' as work_no,'葛香俊' as sales_name,'否' as is_part_time_service_manager,1 as salesperson_sales_value_fp_rate,1 as salesperson_profit_fp_rate,0 as service_user_sales_value_fp_rate,0 as service_user_profit_fp_rate
+union all   select '125638' as customer_no,'' as service_user_work_no,'' as service_user_name,'81089337' as work_no,'葛香俊' as sales_name,'否' as is_part_time_service_manager,1 as salesperson_sales_value_fp_rate,1 as salesperson_profit_fp_rate,0 as service_user_sales_value_fp_rate,0 as service_user_profit_fp_rate
+union all   select '125731' as customer_no,'' as service_user_work_no,'' as service_user_name,'81089337' as work_no,'葛香俊' as sales_name,'否' as is_part_time_service_manager,1 as salesperson_sales_value_fp_rate,1 as salesperson_profit_fp_rate,0 as service_user_sales_value_fp_rate,0 as service_user_profit_fp_rate
+union all   select '125880' as customer_no,'' as service_user_work_no,'' as service_user_name,'81089337' as work_no,'葛香俊' as sales_name,'否' as is_part_time_service_manager,1 as salesperson_sales_value_fp_rate,1 as salesperson_profit_fp_rate,0 as service_user_sales_value_fp_rate,0 as service_user_profit_fp_rate
+union all   select '113591' as customer_no,'' as service_user_work_no,'' as service_user_name,'81089336' as work_no,'陈静' as sales_name,'是' as is_part_time_service_manager,0.3 as salesperson_sales_value_fp_rate,0.5 as salesperson_profit_fp_rate,0 as service_user_sales_value_fp_rate,0 as service_user_profit_fp_rate
+union all   select '113724' as customer_no,'' as service_user_work_no,'' as service_user_name,'81089336' as work_no,'陈静' as sales_name,'是' as is_part_time_service_manager,0.3 as salesperson_sales_value_fp_rate,0.5 as salesperson_profit_fp_rate,0 as service_user_sales_value_fp_rate,0 as service_user_profit_fp_rate
+union all   select '113749' as customer_no,'' as service_user_work_no,'' as service_user_name,'81089336' as work_no,'陈静' as sales_name,'是' as is_part_time_service_manager,0.3 as salesperson_sales_value_fp_rate,0.5 as salesperson_profit_fp_rate,0 as service_user_sales_value_fp_rate,0 as service_user_profit_fp_rate
+union all   select '117422' as customer_no,'' as service_user_work_no,'' as service_user_name,'81089336' as work_no,'陈静' as sales_name,'是' as is_part_time_service_manager,0.3 as salesperson_sales_value_fp_rate,0.5 as salesperson_profit_fp_rate,0 as service_user_sales_value_fp_rate,0 as service_user_profit_fp_rate
+union all   select '118824' as customer_no,'' as service_user_work_no,'' as service_user_name,'81089336' as work_no,'陈静' as sales_name,'是' as is_part_time_service_manager,1 as salesperson_sales_value_fp_rate,1 as salesperson_profit_fp_rate,0 as service_user_sales_value_fp_rate,0 as service_user_profit_fp_rate
+union all   select '118848' as customer_no,'' as service_user_work_no,'' as service_user_name,'81089336' as work_no,'陈静' as sales_name,'是' as is_part_time_service_manager,1 as salesperson_sales_value_fp_rate,1 as salesperson_profit_fp_rate,0 as service_user_sales_value_fp_rate,0 as service_user_profit_fp_rate
+union all   select '119196' as customer_no,'' as service_user_work_no,'' as service_user_name,'81089336' as work_no,'陈静' as sales_name,'是' as is_part_time_service_manager,1 as salesperson_sales_value_fp_rate,1 as salesperson_profit_fp_rate,0 as service_user_sales_value_fp_rate,0 as service_user_profit_fp_rate
+union all   select '120098' as customer_no,'' as service_user_work_no,'' as service_user_name,'81089336' as work_no,'陈静' as sales_name,'是' as is_part_time_service_manager,1 as salesperson_sales_value_fp_rate,1 as salesperson_profit_fp_rate,0 as service_user_sales_value_fp_rate,0 as service_user_profit_fp_rate
+union all   select '120130' as customer_no,'' as service_user_work_no,'' as service_user_name,'81089336' as work_no,'陈静' as sales_name,'是' as is_part_time_service_manager,1 as salesperson_sales_value_fp_rate,1 as salesperson_profit_fp_rate,0 as service_user_sales_value_fp_rate,0 as service_user_profit_fp_rate
+union all   select '120985' as customer_no,'' as service_user_work_no,'' as service_user_name,'81089336' as work_no,'陈静' as sales_name,'是' as is_part_time_service_manager,1 as salesperson_sales_value_fp_rate,1 as salesperson_profit_fp_rate,0 as service_user_sales_value_fp_rate,0 as service_user_profit_fp_rate
+union all   select '121368' as customer_no,'' as service_user_work_no,'' as service_user_name,'81089336' as work_no,'陈静' as sales_name,'是' as is_part_time_service_manager,1 as salesperson_sales_value_fp_rate,1 as salesperson_profit_fp_rate,0 as service_user_sales_value_fp_rate,0 as service_user_profit_fp_rate
+union all   select '116242' as customer_no,'' as service_user_work_no,'' as service_user_name,'81052035' as work_no,'袁成臣' as sales_name,'是' as is_part_time_service_manager,1 as salesperson_sales_value_fp_rate,1 as salesperson_profit_fp_rate,0 as service_user_sales_value_fp_rate,0 as service_user_profit_fp_rate
+union all   select '123311' as customer_no,'81103328' as service_user_work_no,'武艳' as service_user_name,'81103065' as work_no,'王世超' as sales_name,'否' as is_part_time_service_manager,0.9 as salesperson_sales_value_fp_rate,0.8 as salesperson_profit_fp_rate,0.1 as service_user_sales_value_fp_rate,0.2 as service_user_profit_fp_rate
+union all   select '124033' as customer_no,'81020509' as service_user_work_no,'陈素彩' as service_user_name,'81103065' as work_no,'王世超' as sales_name,'否' as is_part_time_service_manager,0.9 as salesperson_sales_value_fp_rate,0.8 as salesperson_profit_fp_rate,0.1 as service_user_sales_value_fp_rate,0.2 as service_user_profit_fp_rate
+union all   select '118376' as customer_no,'81103328' as service_user_work_no,'武艳' as service_user_name,'81103065' as work_no,'王世超' as sales_name,'否' as is_part_time_service_manager,0.9 as salesperson_sales_value_fp_rate,0.8 as salesperson_profit_fp_rate,0.1 as service_user_sales_value_fp_rate,0.2 as service_user_profit_fp_rate
+union all   select '124524' as customer_no,'81103328;81138104' as service_user_work_no,'武艳;郭凯利' as service_user_name,'81103065' as work_no,'王世超' as sales_name,'否' as is_part_time_service_manager,0.9 as salesperson_sales_value_fp_rate,0.8 as salesperson_profit_fp_rate,0.1 as service_user_sales_value_fp_rate,0.2 as service_user_profit_fp_rate
+
+; --5
+
+
+--客户应收金额、逾期金额
+drop table csx_tmp.tc_cust_overdue_0;
+create table csx_tmp.tc_cust_overdue_0
+as
+select
+	sdt,
+	--customer_code as customer_no,
+	customer_no,
+	customer_name,company_code,company_name,channel_code,channel_name,payment_terms,payment_days,payment_name,receivable_amount,overdue_amount,max_overdue_day,
+	overdue_coefficient_numerator, -- 逾期金额*逾期天数 计算因子，用于计算逾期系数分子
+	overdue_coefficient_denominator -- 应收金额*账期天数 计算因子，用于计算逾期系数分母
+from
+	--csx_dw.dws_sss_r_d_customer_settle_detail
+	csx_dw.dws_sss_r_a_customer_company_accounts
+where
+	sdt=${hiveconf:month_end_day}
+	--202201月签呈，剔除逾期，每月
+	and customer_no not in ('119131')
+	--202202月签呈，剔除逾期，每月
+	and customer_no not in ('104192','123395','117927','119925')
+	--202202月签呈，客户已转代理人，剔除逾期，每月
+	and customer_no not in ('122221')
+	--202202月签呈，剔除逾期，每月
+	and customer_no not in ('116661','103369','104817','105601','104381','105304','105714','118794','120595','120830','122837','116932','119209','119022','119214','119257',
+	'113425','112129')
+	--202202月签呈，剔除逾期，当月
+	and customer_no not in ('116727','113439','105502','114576','114269','116721','119965','114945','120618','125613','124379','125247','125256','124025','124667','124621',
+	'124370','125469','123599','124782')
+	
+; 
+
+-- 查询结果集
+--计算逾期系数
+
+insert overwrite directory '/tmp/zhangyanpeng/yuqi_dakehu' row format delimited fields terminated by '\t'
+select 
+	a.channel_name,	-- 渠道
+	b.sales_province_name,	-- 省区
+	a.customer_no,	-- 客户编码
+	a.customer_name,	-- 客户名称
+	d.work_no,	-- 销售员工号
+	d.sales_name,	-- 销售员
+	d.service_user_work_no,d.service_user_name,d.is_part_time_service_manager,
+	a.payment_terms,	-- 账期编码
+	a.payment_days,	-- 帐期天数
+	a.payment_name,	-- 账期名称
+	a.company_code,	-- 公司代码
+	a.company_name,	-- 公司名称,
+	a.receivable_amount,	-- 应收金额
+	a.overdue_amount,	-- 逾期金额
+	overdue_coefficient_numerator, -- 逾期金额*逾期天数 计算因子，用于计算逾期系数分子
+	overdue_coefficient_denominator, -- 应收金额*账期天数 计算因子，用于计算逾期系数分母
+	coalesce(round(case when coalesce(case when a.receivable_amount>=0 then a.receivable_amount else 0 end, 0) <= 1 then 0  
+		else coalesce(case when overdue_coefficient_numerator>=0 and a.receivable_amount>0 then overdue_coefficient_numerator else 0 end, 0)
+		/(case when overdue_coefficient_denominator>=0 and a.receivable_amount>0 then overdue_coefficient_denominator else 0 end) end, 6),0) as over_rate -- 逾期系数		
+from
+	(
+	select
+		customer_no,
+		customer_name,company_code,company_name,channel_code,channel_name,payment_terms,payment_days,payment_name,receivable_amount,overdue_amount,max_overdue_day,
+		overdue_coefficient_numerator, -- 逾期金额*逾期天数 计算因子，用于计算逾期系数分子
+		overdue_coefficient_denominator -- 应收金额*账期天数 计算因子，用于计算逾期系数分母
+	from 
+		csx_tmp.tc_cust_overdue_0  
+	where 
+		channel_name = '大客户' 
+		and sdt = ${hiveconf:month_end_day} 	
+	)a
+	--剔除业务代理与内购客户
+	join		
+		(
+		select 
+			* 
+		from 
+			csx_dw.dws_crm_w_a_customer 
+		where 
+			sdt=${hiveconf:month_end_day} 
+			and (channel_code in('1','7','8'))  ----渠道编号-1.大客户 2.商超 4.大宗 5.供应链(食百) 6.供应链(生鲜) 7.企业购 8.其他 9.业务代理
+			and (customer_name not like '%内%购%' and customer_name not like '%临保%')	
+		)b on b.customer_no=a.customer_no  
+	--剔除当月有城市服务商与批发内购业绩的客户逾期系数
+	left join 
+		(
+		select 
+			distinct customer_no 
+		from 
+			csx_dw.dws_sale_r_d_detail 
+		where 
+			sdt>=${hiveconf:month_start_day} 
+			and sdt<=${hiveconf:month_end_day} 
+			and business_type_code in('3','4')
+			-- 不剔除城市服务商2.0，按大客户提成方案计算
+			and customer_no not in('112207','115023','116959','117817','119262','120294','120939','121276','121298','121472','121625','123244','124219','124473','124498',
+			'124601','125161','125284')
+		)e on e.customer_no=a.customer_no
+	--关联客户对应销售员与服务管家
+	left join		
+		(  
+		select 
+			distinct customer_no,service_user_work_no,service_user_name,	  
+			work_no,sales_name,is_part_time_service_manager
+		from 
+			csx_tmp.tc_customer_service_manager_info_new
+		)d on d.customer_no=a.customer_no	  
+where 
+	e.customer_no is null
+	and (a.receivable_amount>0 or a.receivable_amount is null)
+; 
+	
+
+--客户逾期系数
+drop table csx_tmp.tc_cust_over_rate; --13
+create table csx_tmp.tc_cust_over_rate
+as 
+select 
+	channel_name,	-- 渠道
+	customer_no,	-- 客户编码
+	customer_name,	-- 客户名称,
+	sum(case when receivable_amount>=0 then receivable_amount else 0 end) receivable_amount,	-- 应收金额
+	sum(case when overdue_amount>=0 and receivable_amount>0 then overdue_amount else 0 end) overdue_amount,	-- 逾期金额
+	sum(case when overdue_coefficient_numerator>=0 and receivable_amount>0 
+		then overdue_coefficient_numerator else 0 end) as overdue_coefficient_numerator,	-- 逾期金额*逾期天数
+	sum(case when overdue_coefficient_denominator>=0 and receivable_amount>0 
+		then overdue_coefficient_denominator else 0 end) overdue_coefficient_denominator,	-- 应收金额*帐期天数	
+	coalesce(round(
+		case when coalesce(sum(case when receivable_amount>=0 then receivable_amount else 0 end), 0) <= 1 then 0  
+		else coalesce(sum(case when overdue_coefficient_numerator>=0 and receivable_amount>0 then overdue_coefficient_numerator else 0 end), 0)
+		/(sum(case when overdue_coefficient_denominator>=0  and receivable_amount>0 then overdue_coefficient_denominator else 0 end)) end, 6),0) as over_rate -- 逾期系数 
+from 
+	csx_tmp.tc_cust_overdue_0 a 
+where 
+	channel_name = '大客户' 
+	and sdt = ${hiveconf:month_end_day} 
+group by 
+	channel_name,customer_no,customer_name
+--having
+--	sum(receivable_amount)>0 or sum(receivable_amount) is null
+
+;
+
+--销售员逾期系数
+drop table csx_tmp.tc_salesname_over_rate;
+create table csx_tmp.tc_salesname_over_rate
+as
+select 
+	a.channel_name,	-- 渠道
+	d.work_no,	-- 销售员工号
+	d.sales_name,	-- 销售员
+	sum(case when receivable_amount>=0 then receivable_amount else 0 end) receivable_amount,	-- 应收金额
+	sum(case when overdue_amount>=0 and receivable_amount>0 then overdue_amount else 0 end) overdue_amount,	-- 逾期金额
+	sum(case when overdue_coefficient_numerator>=0 and receivable_amount>0 
+		then overdue_coefficient_numerator else 0 end) as overdue_coefficient_numerator,	-- 逾期金额*逾期天数
+	sum(case when overdue_coefficient_denominator>=0 and receivable_amount>0 
+		then overdue_coefficient_denominator else 0 end) overdue_coefficient_denominator,	-- 应收金额*帐期天数	
+	coalesce(round(
+		case when coalesce(sum(case when receivable_amount>=0 then receivable_amount else 0 end), 0) <= 1 then 0  
+		else coalesce(sum(case when overdue_coefficient_numerator>=0 and receivable_amount>0 then overdue_coefficient_numerator else 0 end), 0)
+		/(sum(case when overdue_coefficient_denominator>=0  and receivable_amount>0 then overdue_coefficient_denominator else 0 end)) end, 6),0) as over_rate -- 逾期系数 		
+from
+	(
+	select
+		customer_no,
+		customer_name,company_code,company_name,channel_code,channel_name,payment_terms,payment_days,payment_name,receivable_amount,overdue_amount,max_overdue_day,
+		overdue_coefficient_numerator, -- 逾期金额*逾期天数 计算因子，用于计算逾期系数分子
+		overdue_coefficient_denominator -- 应收金额*账期天数 计算因子，用于计算逾期系数分母
+	from 
+		csx_tmp.tc_cust_overdue_0  
+	where 
+		channel_name = '大客户' 
+		and sdt = ${hiveconf:month_end_day} 	
+	)a
+	--剔除业务代理与内购客户
+	join		
+		(
+		select 
+			* 
+		from 
+			csx_dw.dws_crm_w_a_customer 
+		where 
+			sdt=${hiveconf:month_end_day} 
+			and (channel_code in('1','7','8'))  ----渠道编号-1.大客户 2.商超 4.大宗 5.供应链(食百) 6.供应链(生鲜) 7.企业购 8.其他 9.业务代理
+			and (customer_name not like '%内%购%' and customer_name not like '%临保%')	
+		)b on b.customer_no=a.customer_no  
+	--剔除当月有城市服务商与批发内购业绩的客户逾期系数
+	left join 
+		(
+		select 
+			distinct customer_no 
+		from 
+			csx_dw.dws_sale_r_d_detail 
+		where 
+			sdt>=${hiveconf:month_start_day} 
+			and sdt<=${hiveconf:month_end_day} 
+			and business_type_code in('3','4')
+			-- 不剔除城市服务商2.0，按大客户提成方案计算
+			and customer_no not in('112207','115023','116959','117817','119262','120294','120939','121276','121298','121472','121625','123244','124219','124473','124498',
+			'124601','125161','125284')
+		)e on e.customer_no=a.customer_no
+	--关联客户对应销售员与服务管家
+	left join		
+		(  
+		select 
+			distinct customer_no,service_user_work_no,service_user_name,	  
+			work_no,sales_name,is_part_time_service_manager
+		from 
+			csx_tmp.tc_customer_service_manager_info_new
+		)d on d.customer_no=a.customer_no	  
+where 
+	e.customer_no is null
+group by 
+	a.channel_name,	-- 渠道
+	d.work_no,	-- 销售员工号
+	d.sales_name	-- 销售员
+;
+				
+
+--服务管家逾期率
+drop table csx_tmp.tc_service_user_over_rate;
+create table csx_tmp.tc_service_user_over_rate
+as
+select 
+	a.channel_name,	-- 渠道
+	d.service_user_work_no,
+	d.service_user_name,
+	sum(case when receivable_amount>=0 then receivable_amount else 0 end) receivable_amount,	-- 应收金额
+	sum(case when overdue_amount>=0 and receivable_amount>0 then overdue_amount else 0 end) overdue_amount,	-- 逾期金额
+	sum(case when overdue_coefficient_numerator>=0 and receivable_amount>0 
+		then overdue_coefficient_numerator else 0 end) as overdue_coefficient_numerator,	-- 逾期金额*逾期天数
+	sum(case when overdue_coefficient_denominator>=0 and receivable_amount>0 
+		then overdue_coefficient_denominator else 0 end) overdue_coefficient_denominator,	-- 应收金额*帐期天数	
+	coalesce(round(
+		case when coalesce(sum(case when receivable_amount>=0 then receivable_amount else 0 end), 0) <= 1 then 0  
+		else coalesce(sum(case when overdue_coefficient_numerator>=0 and receivable_amount>0 then overdue_coefficient_numerator else 0 end), 0)
+		/(sum(case when overdue_coefficient_denominator>=0  and receivable_amount>0 then overdue_coefficient_denominator else 0 end)) end, 6),0) as over_rate -- 逾期系数 		
+from
+	(
+	select
+		customer_no,
+		customer_name,company_code,company_name,channel_code,channel_name,payment_terms,payment_days,payment_name,receivable_amount,overdue_amount,max_overdue_day,
+		overdue_coefficient_numerator, -- 逾期金额*逾期天数 计算因子，用于计算逾期系数分子
+		overdue_coefficient_denominator -- 应收金额*账期天数 计算因子，用于计算逾期系数分母
+	from 
+		csx_tmp.tc_cust_overdue_0  
+	where 
+		channel_name = '大客户' 
+		and sdt = ${hiveconf:month_end_day} 	
+	)a
+	--剔除业务代理与内购客户
+	join		
+		(
+		select 
+			* 
+		from 
+			csx_dw.dws_crm_w_a_customer 
+		where 
+			sdt=${hiveconf:month_end_day} 
+			and (channel_code in('1','7','8'))  ----渠道编号-1.大客户 2.商超 4.大宗 5.供应链(食百) 6.供应链(生鲜) 7.企业购 8.其他 9.业务代理
+			and (customer_name not like '%内%购%' and customer_name not like '%临保%')	
+		)b on b.customer_no=a.customer_no  
+	--剔除当月有城市服务商与批发内购业绩的客户逾期系数
+	left join 
+		(
+		select 
+			distinct customer_no 
+		from 
+			csx_dw.dws_sale_r_d_detail 
+		where 
+			sdt>=${hiveconf:month_start_day} 
+			and sdt<=${hiveconf:month_end_day} 
+			and business_type_code in('3','4')
+			-- 不剔除城市服务商2.0，按大客户提成方案计算
+			and customer_no not in('112207','115023','116959','117817','119262','120294','120939','121276','121298','121472','121625','123244','124219','124473','124498',
+			'124601','125161','125284')
+		)e on e.customer_no=a.customer_no
+	--关联客户对应销售员与服务管家
+	left join		
+		(  
+		select 
+			distinct customer_no,service_user_work_no,service_user_name,	  
+			work_no,sales_name,is_part_time_service_manager
+		from 
+			csx_tmp.tc_customer_service_manager_info_new
+		)d on d.customer_no=a.customer_no	  
+where 
+	e.customer_no is null
+group by 
+	a.channel_name,	-- 渠道
+	d.service_user_work_no,
+	d.service_user_name
+;
+
+
+
+--大宗供应链的逾期系数
+insert overwrite directory '/tmp/zhangyanpeng/yuqi_dazong' row format delimited fields terminated by '\t'
+select 
+	a.channel_name,	-- 渠道
+	b.sales_province_name,	-- 省区
+	a.customer_no,	-- 客户编码
+	a.customer_name,	-- 客户名称
+	b.work_no,	-- 销售员工号
+	b.sales_name,	-- 销售员
+	a.payment_terms,	-- 账期编码
+	a.payment_days,	-- 帐期天数
+	a.payment_name,	-- 账期名称
+	a.company_code,	-- 公司代码
+	a.company_name,	-- 公司名称
+	a.receivable_amount,	-- 应收金额
+	a.overdue_amount,	-- 逾期金额
+	overdue_coefficient_numerator, -- 逾期金额*逾期天数 计算因子，用于计算逾期系数分子
+	overdue_coefficient_denominator, -- 应收金额*账期天数 计算因子，用于计算逾期系数分母
+	if(overdue_coefficient_numerator/overdue_coefficient_denominator<0,0,overdue_coefficient_numerator/overdue_coefficient_denominator) as over_rate -- 逾期系数			    
+from
+	(
+	select
+		customer_no,
+		customer_name,company_code,company_name,channel_code,channel_name,payment_terms,payment_days,payment_name,receivable_amount,overdue_amount,max_overdue_day,
+		overdue_coefficient_numerator, -- 逾期金额*逾期天数 计算因子，用于计算逾期系数分子
+		overdue_coefficient_denominator -- 应收金额*账期天数 计算因子，用于计算逾期系数分母		
+	from 
+		csx_tmp.tc_cust_overdue_0  
+	where 
+		(channel_name like '大宗%' or channel_name like '%供应链%')
+		and sdt =${hiveconf:month_end_day} 
+	)a
+	join		 
+		(
+		select 
+			* 
+		from 
+			csx_dw.dws_crm_w_a_customer 
+		where 
+			sdt=${hiveconf:month_end_day} 
+			and channel_code in('4','5','6') ----渠道编号-1.大客户 2.商超 4.大宗 5.供应链(食百) 6.供应链(生鲜) 7.企业购 8.其他 9.业务代理
+		)b on b.customer_no=a.customer_no 
+where
+	(a.receivable_amount>0 or a.receivable_amount is null)
+;
+
+--=============================================================================================================================================================================
+
+--查询城市服务商2.0客户,按库存DC
+
+--select distinct inventory_dc_code from csx_ods.source_csms_w_a_yszx_town_service_provider_config; -- W0AW、W0BY、W0K7、W0L4；W0AW、W0K7
+
+--select 
+--	a.*,c.work_no,c.sales_name
+--from 
+--	(
+--	select 
+--		province_name,customer_no,customer_name,business_type_name,dc_code,
+--		sum(sales_value)sales_value
+--	from 
+--		csx_dw.dws_sale_r_d_detail
+--	where 
+--		sdt>='20220201'
+--		and sdt<='20220228'
+--		and channel_code in('1','7','9')
+--	group by 
+--		province_name,customer_no,customer_name,business_type_name,dc_code
+--	)a 
+--	join 
+--		(
+--		select 
+--			distinct customer_no
+--		from 
+--			csx_dw.dws_sale_r_d_detail
+--		where 
+--			sdt>='20220201'
+--			and sdt<='20220228'
+--			and channel_code in('1','7','9')
+--			and dc_code in('W0AW','W0K7')
+--		) b on b.customer_no=a.customer_no
+--	left join 
+--		(
+--		select 
+--			distinct customer_no,customer_name,work_no,sales_name,sales_province_name
+--		from 
+--			csx_dw.dws_crm_w_a_customer 
+--		where 
+--			sdt='20220228'
+--		)c on c.customer_no=a.customer_no;
+
+
+--安徽省按照大客户计算的客户
+
+--select 
+--	a.customer_no
+--from 
+--	(
+--	select 
+--		province_name,customer_no,customer_name,business_type_name,
+--		sum(sales_value)sales_value
+--	from 
+--		csx_dw.dws_sale_r_d_detail
+--	where 
+--		sdt>='20220201'
+--		and sdt<='20220228'
+--		and channel_code in('1','7','9')
+--		and business_type_code in ('4')
+--	group by 
+--		province_name,customer_no,customer_name,business_type_name
+--	)a 
+--	--淮南名单：81107924 陈治强  81034712 董冬燕，除了淮南都按大客户
+--	join 
+--		(
+--		select 
+--			customer_no,customer_name,work_no,sales_name,sales_province_name
+--		from 
+--			csx_dw.dws_crm_w_a_customer 
+--		where 
+--			sdt='20220228'
+--			and sales_province_name='安徽省'
+--			and work_no not in ('81107924','81034712')
+--		)c on c.customer_no=a.customer_no
+--group by 
+--	a.customer_no
+--;
+
+

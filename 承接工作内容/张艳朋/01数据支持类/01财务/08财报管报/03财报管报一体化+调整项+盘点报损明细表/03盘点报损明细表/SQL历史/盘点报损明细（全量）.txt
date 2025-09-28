@@ -1,0 +1,84 @@
+
+/*业务盘点*/
+SELECT
+	create_time as '创建时间', 
+	posting_time as '记账日期',
+	company_code as '公司代码',
+	company_name as '公司名称',
+	location_code as 'DC编码',
+	location_name as 'DC名称',
+	reservoir_area_code as '库区编码',
+	reservoir_area_name as '库区名称',
+	purchase_group_code as '采购组编码',
+	purchase_group_name as '采购组名称',
+	product_code as '商品编码',
+	product_name as '商品名称',
+	move_type as '移动类型编码',
+	move_name as '移动类型名称',
+	(case when direction='-' then -1*qty else qty end) as '盘点数量',
+	(case when direction='-' then -1*amt_no_tax else amt_no_tax end) as '盘点不含税金额',
+	(case when direction='-' then -1*amt else amt end) as '盘点含税金额'
+FROM
+	accounting_credential_item 
+WHERE
+	posting_time >= '2020-03-01 00:00:00' 
+	AND posting_time < '2020-04-01 00:00:00'
+	AND substr(move_type,1,3) in ('110','111') 
+	AND substr(reservoir_area_code,1,2) <>'PD'
+	
+	
+/*财务盘点*/
+SELECT
+	create_time as '创建时间', 
+	posting_time as '记账日期',
+	company_code as '公司代码',
+	company_name as '公司名称',
+	location_code as 'DC编码',
+	location_name as 'DC名称',
+	reservoir_area_code as '库区编码',
+	reservoir_area_name as '库区名称',
+	purchase_group_code as '采购组编码',
+	purchase_group_name as '采购组名称',
+	product_code as '商品编码',
+	product_name as '商品名称',
+	move_type as '移动类型编码',
+	move_name as '移动类型名称',
+	(case when direction='-' then -1*qty else qty end) as '盘点数量',
+	(case when direction='-' then -1*amt_no_tax else amt_no_tax end) as '盘点不含税金额',
+	(case when direction='-' then -1*amt else amt end) as '盘点含税金额'
+FROM
+	accounting_credential_item 
+WHERE
+	posting_time >= '2020-03-01 00:00:00' 
+	AND posting_time < '2020-04-01 00:00:00'
+	AND substr(move_type,1,3) in ('115','116') 
+	AND amt_no_tax<>'0'
+	
+	/*报损*/
+SELECT
+	item.create_time as '创建时间', 
+	item.posting_time as '记账日期',
+	item.company_code as '公司代码',
+	item.company_name as '公司名称',
+	item.location_code as 'DC编码',
+	item.location_name as 'DC名称',
+	item.reservoir_area_code as '库区编码',
+	item.reservoir_area_name as '库区名称',
+	item.purchase_group_code as '采购组编码',
+	item.purchase_group_name as '采购组名称',
+	item.product_code as '商品编码',
+	item.product_name as '商品名称',
+	item.move_type as '移动类型编码',
+	item.move_name as '移动类型名称',
+	header.wms_biz_type as '报损类型',
+	header.wms_biz_type_name as '报损名称',
+	(case when item.direction='-' then -1*item.qty else item.qty end) as '报损数量',
+	(case when item.direction='-' then -1*item.amt_no_tax else item.amt_no_tax end) as '报损不含税金额',
+	(case when item.direction='-' then -1*item.amt else item.amt end) as '报损含税金额'
+FROM
+	accounting_credential_item item
+	LEFT JOIN accounting_credential_header header on item.credential_no=header.credential_no
+WHERE
+	item.posting_time >= '2020-03-01 00:00:00' 
+	AND item.posting_time < '2020-04-01 00:00:00'
+	AND substr(item.move_type,1,3) in ('117') 

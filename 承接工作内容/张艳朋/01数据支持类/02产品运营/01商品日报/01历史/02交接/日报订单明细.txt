@@ -1,0 +1,89 @@
+﻿insert overwrite directory '/tmp/gengtiecheng/0704' row format delimited fields terminated by '\t' 
+SELECT 
+* 
+FROM 
+(
+SELECT
+  substr(sdt,1,6)smonth,
+  dc_code AS `库存dc编码`,
+  dc_name AS `库存dc名称`,
+  dc_company_code AS `公司代码`,
+  dc_company_name AS `公司名称`,
+  order_no AS `订单号`,
+  a.customer_no AAA,
+  customer_name AS `客户名称`,
+  child_customer_no AS `子客户编码`,
+  regexp_replace(child_customer_name, '\n|\t|\r', '') AS `子客户名称`,
+  channel_name AS `客户渠道`,
+  attribute AS `客户属性`,
+  first_category_code AS `一级分类编码`,
+  first_category AS `一级分类`,
+  second_category_code AS `二级分类编码`,
+  second_category AS `二级分类`,
+  third_category_code AS `三级分类编码`,
+  third_category AS `三级分类`,
+  sales_province_code AS `销售省区编码`,
+  province_name AS `销售省区`,
+  sales_city_code AS `销售城市编码`,
+  sales_city AS `销售城市`,
+  sign_time AS `签约时间`,
+  sales_name AS `业务员名称`,
+  supervisor_name AS `主管名称`,
+  province_manager_name AS `省区主管名称`,
+  ---org_name AS `业务员所属组织名称`,
+  sales_date AS `销售日期`,
+  a.goods_code AS `商品编码`,
+  regexp_replace(goods_name, '\n|\t|\r', '') AS `商品名称`,
+  unit AS `计量单位`,
+  division_code AS `部类编码`,
+  division_name AS `部类名称`,
+  category_large_name AS `大类名称`,
+  category_middle_name AS `中类名称`,
+  category_small_name AS `小类名称`,
+  department_code AS `课组编码`,
+  department_name AS `课组名称`,
+  report_price AS `报价标识`,
+  cost_price AS `正常进价`,
+  purchase_price AS `采购价格`,
+  middle_office_price AS `中台报价`,
+  promotion_price AS `商品售价`,
+  sales_qty AS `销售数量`,
+  sales_value AS `销售额`,
+  sales_cost AS `销售成本`,
+  profit AS `毛利`,
+  front_profit AS `前端毛利`,
+  tax_rate AS `税费比例`,
+  tax_value AS `税金`,
+  excluding_tax_sales AS `未税销售额`,
+  case when order_mode = 0 then '配送'
+    when order_mode = 1 then '直送'
+    when order_mode = 2 then '自提'
+    when order_mode = 3 then '直通'
+    else '' end AS `订单模式`,
+  order_kind AS `订单类型`,
+  if(self_product_name <> '', '是', '否') AS `是否转换`,
+  if(a.sdt = b.first_sale_day, '是', '否') AS `是否首次下单`,
+  is_factory_goods_name AS `是否工厂加工商品`
+FROM
+(
+  SELECT * FROM csx_dw.dws_sale_r_d_customer_sale
+  WHERE sdt >= '20200722' AND sdt <= '20200722'
+  ---AND attribute_code != '5'
+  AND channel_name LIKE '大客户%'
+  AND sales_type in ('qyg','sapqyg','sapgc','sc','bbc')
+) a LEFT JOIN
+(
+  select
+    customer_no,
+    first_sale_day
+  from csx_dw.ads_sale_w_d_ads_customer_sales_q
+  where sdt = '20200722'
+) b on a.customer_no = b.customer_no
+) A
+left join 
+(select 
+     distinct customer_no,
+     substr(sdt,1,6)smonth 
+from csx_dw.csx_partner_list 
+) d on d.customer_no=A.AAA and d.smonth=A.smonth
+where d.customer_no is null

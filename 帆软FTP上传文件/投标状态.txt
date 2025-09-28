@@ -1,0 +1,144 @@
+with sale_detail as
+(
+select a.*,p.extra
+from csx_dws.csx_dws_sale_detail_di a 
+left join 
+  (select
+      `code`,
+      name,
+      extra
+    from
+      csx_dim.csx_dim_basic_topic_dict_df
+    where
+      parent_code = 'direct_delivery_type') p on cast(a.direct_delivery_type as string) =  code
+where
+	((sdt>=regexp_replace(to_date(add_months(trunc(date_sub(current_timestamp(),1),'MM'),0)),'-','')
+	and sdt<=regexp_replace(to_date(add_months(date_sub(current_timestamp(),1),0)),'-','')
+	) or (sdt>=regexp_replace(to_date(add_months(trunc(date_sub(current_timestamp(),1),'MM'),-1)),'-','')
+	and sdt<=regexp_replace(to_date(add_months(date_sub(current_timestamp(),1),-1)),'-','')
+	))
+	-- and channel_code in ('1','7','9')
+	and business_type_code = 1
+	and a.customer_code not in ('252028','233646')
+	and p.extra='采购参与' 
+	${if(len(sq)==0,"","AND a.performance_province_name in( '"+sq+"') ")}
+	${if(len(city)==0,"","AND a.performance_city_name in( '"+city+"') ")}
+
+),
+
+sale_detail_total as
+(
+select a.performance_province_name,
+	${if(len(city)==0,"","a.performance_city_name,")}
+    a.classify_middle_code,
+    a.classify_middle_name,
+    manager_name,
+    sum(plan_sales_value) plan_sales_value,
+    sum(plan_profit) plan_profit,
+    sum(by_sale_amt) by_sale_amt,
+    sum(by_profit) by_profit,
+    sum(sy_sale_amt) sy_sale_amt,
+    sum(sy_profit) sy_profit
+from (
+select
+	-- substr(sdt,1,6) as month_sdt,
+	-- sdt,
+	performance_province_name,
+	${if(len(city)==0,"","performance_city_name,")}
+--	classify_large_name,
+    classify_middle_code,
+	case when classify_middle_name ='调理预制品' then '预制菜' else classify_middle_name end classify_middle_name,
+	0 plan_sales_value,
+    0 plan_profit,	
+	sum(if(sdt>=substr(regexp_replace(cast(trunc(date_sub(to_date(now()),1),'MM')as string),'-',''),1,8),sale_amt,0)) by_sale_amt,
+	sum(if(sdt>=substr(regexp_replace(cast(trunc(date_sub(to_date(now()),1),'MM')as string),'-',''),1,8),profit,0)) by_profit,
+	sum(if(sdt<substr(regexp_replace(cast(trunc(date_sub(to_date(now()),1),'MM')as string),'-',''),1,8),sale_amt,0)) sy_sale_amt,
+	sum(if(sdt<substr(regexp_replace(cast(trunc(date_sub(to_date(now()),1),'MM')as string),'-',''),1,8),profit,0)) sy_profit
+from sale_detail 
+group by
+	performance_province_name,
+	${if(len(city)==0,"","performance_city_name,")}
+	classify_middle_code,
+-- 	classify_large_name,
+	case when classify_middle_name ='调理预制品' then '预制菜' else classify_middle_name end
+union all 
+select province_name,
+	${if(len(city)==0,"","city_group_name,")}
+    -- city_group_name,
+    classify_middle_code,
+    classify_middle_name,
+    cast(plan_sales_value as decimal(26,6)) plan_sales_value,
+    cast(plan_profit as decimal(26,6)) plan_profit,
+    0 by_sale_amt,
+    0 by_profit,
+    0 sy_sale_amt,
+    0 sy_profit
+from csx_analyse.csx_analyse_data_analysis_prd_source_r_m_province_month_category_target_df
+where months= substr(regexp_replace(to_date(trunc(date_sub(current_timestamp(),1),'MM')),'-',''),1,6)
+	${if(len(city)==0,""," and city_group_name='"+city+"' ")}
+	${if(len(sq)==0,"","AND province_name in( '"+sq+"') ")}
+) a 
+left join 
+(select distinct
+    province_name,
+    -- city_group_name,
+    classify_middle_name,
+    manager_name
+from csx_analyse.csx_analyse_data_analysis_prd_source_r_m_province_month_category_target_df
+where months=  substr(regexp_replace(to_date(trunc(date_sub(current_timestamp(),1),'MM')),'-',''),1,6)
+	${if(len(city)==0,""," and city_group_name ='"+city+"' ")}
+	${if(len(sq)==0,"","AND province_name in( '"+sq+"') ")}
+)b on a.performance_province_name=b.province_name and a.classify_middle_name=b.classify_middle_name 
+group by  performance_province_name,
+	${if(len(city)==0,"","a.performance_city_name,")}
+    classify_middle_name,
+    manager_name,
+    a.classify_middle_code
+)
+,
+
+sale_detail_day as
+(
+select
+	substr(sdt,1,6) as month_sdt,
+	sdt,
+	performance_province_name,
+	${if(len(city)==0,"","performance_city_name,")}
+	classify_large_name,
+	case when classify_middle_name ='调理预制品' then '预制菜' else classify_middle_name end classify_middle_name,
+	sum(sale_amt) sale_amt,
+	sum(profit) profit
+from sale_detail
+where sdt>=substr(regexp_replace(cast(trunc(date_sub(to_date(now()),1),'MM')as string),'-',''),1,8)
+group by
+	substr(sdt,1,6),
+	sdt,
+	performance_province_name,
+	${if(len(city)==0,"","performance_city_name,")}
+	classify_large_name,
+	case when classify_middle_name ='调理预制品' then '预制菜' else classify_middle_name end
+)
+
+select 
+	concat(a.performance_province_name,'_',a.classify_middle_name) as id,
+	a.performance_province_name,
+	${if(len(city)==0,"","a.performance_city_name,")}
+    a.classify_middle_code,
+    a.classify_middle_name,
+    manager_name,
+    (plan_sales_value) plan_sales_value,
+    (plan_profit) plan_profit,
+    (by_sale_amt)/10000 by_sale_amt,
+    (by_profit)/10000 by_profit,
+    (sy_sale_amt)/10000 sy_sale_amt,
+    (sy_profit)/10000 sy_profit,
+	if(plan_sales_value=0,0,plan_profit/plan_sales_value) plan_profit_rate,
+	b.month_sdt,
+	coalesce(b.sdt,'') as sdt,
+	b.sale_amt/10000 sale_amt,
+	b.profit/10000 profit
+from sale_detail_total a 
+left join sale_detail_day b on a.performance_province_name=b.performance_province_name and a.classify_middle_name=b.classify_middle_name
+where 1=1 
+
+order by by_sale_amt desc,sdt desc

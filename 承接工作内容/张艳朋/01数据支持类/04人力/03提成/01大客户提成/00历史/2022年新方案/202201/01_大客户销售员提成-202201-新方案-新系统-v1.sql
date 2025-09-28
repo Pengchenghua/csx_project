@@ -1,0 +1,582 @@
+-- 新建表 销售提成_销售员收入组
+--drop table csx_tmp.sales_income_info;
+--create table if not exists `csx_tmp.sales_income_info` (
+--  `cust_type` STRING comment '销售员类别',
+--  `sales_name` STRING comment '业务员名称',
+--  `work_no` STRING comment '业务员工号',
+--  `income_type` STRING comment '业务员收入组类'
+--) comment '销售提成_销售员收入组'
+--partitioned by (sdt string comment '日期分区')
+--row format delimited fields terminated by ','
+--stored as textfile;
+
+--=============================================================================================================================================================================
+-- 确认需对哪些销售员补充收入组
+set month_start_day ='20220101';	
+set month_end_day ='20220124';
+set last_month_end_day='20211231';
+
+select 
+	b.work_no,b.sales_name,c.income_type,sum(sales_value) sales_value,sum(profit) profit,sum(front_profit) front_profit
+from
+	(
+	select 
+		province_code,province_name,customer_no,substr(sdt,1,6) smonth,sum(sales_value) sales_value,sum(profit) profit,sum(front_profit) front_profit
+	from 
+		csx_dw.dws_sale_r_d_detail
+	where 
+		sdt>=${hiveconf:month_start_day}
+		and sdt<=${hiveconf:month_end_day}
+		and channel_code in('1','7')
+	group by 
+		province_code,province_name,customer_no,substr(sdt,1,6)
+	)a	
+	left join 
+		(
+		select 
+			* 
+		from 
+			csx_dw.dws_crm_w_a_customer 
+		where 
+			sdt=${hiveconf:month_end_day}
+		) b on b.customer_no=a.customer_no
+	left join 
+		(
+		select 
+			distinct work_no,income_type 
+		from 
+			csx_tmp.sales_income_info
+		where 
+			sdt=${hiveconf:last_month_end_day}
+		) c on c.work_no=b.work_no
+where 
+	c.income_type is null
+	and b.sales_name not rlike 'B|C' 
+group by 
+	b.work_no,b.sales_name,c.income_type;
+
+--=============================================================================================================================================================================
+-- 补充收入组并校验
+load data inpath '/tmp/zhangyanpeng/sales_income_info_202201.csv' overwrite into table csx_tmp.sales_income_info partition (sdt=${hiveconf:month_end_day});
+select * from csx_tmp.sales_income_info where sdt=${hiveconf:month_end_day};
+
+--=============================================================================================================================================================================
+-- 设置日期
+set month_start_day ='20220101';	
+set month_end_day ='20220124';	
+set year_start_day ='20220101';		
+		
+-- 销售员年度累计销额提成比例
+drop table csx_tmp.tc_sales_rate_ytd;
+create table csx_tmp.tc_sales_rate_ytd
+as
+select 
+	work_no,sales_name,income_type,ytd,ripei_bbc_ytd,fuli_ytd,
+	case when 
+			((ripei_bbc_ytd<=10000000 and income_type in('Q1','Q2','Q3')) 
+			or (ripei_bbc_ytd>10000000 and ripei_bbc_ytd<=20000000 and income_type in('Q2','Q3'))
+			or (ripei_bbc_ytd>20000000 and ripei_bbc_ytd<=30000000 and income_type in('Q3'))) then 0.002
+		when ((ripei_bbc_ytd>10000000 and ripei_bbc_ytd<=20000000 and income_type in('Q1'))
+			or (ripei_bbc_ytd>20000000 and ripei_bbc_ytd<=30000000 and income_type in('Q2'))
+			or (ripei_bbc_ytd>30000000 and ripei_bbc_ytd<=40000000 and income_type in('Q3'))) then 0.0025
+		when ((ripei_bbc_ytd>20000000 and ripei_bbc_ytd<=30000000 and income_type in('Q1'))
+			or (ripei_bbc_ytd>30000000 and ripei_bbc_ytd<=40000000 and income_type in('Q2'))
+			or (ripei_bbc_ytd>40000000 and income_type in('Q3'))) then 0.003
+		when ((ripei_bbc_ytd>30000000 and ripei_bbc_ytd<=40000000 and income_type in('Q1'))
+			or (ripei_bbc_ytd>40000000 and income_type in('Q2'))) then 0.0035
+		when (ripei_bbc_ytd>40000000 and income_type in('Q1')) then 0.004			
+		else 0.002 end ripei_bbc_sale_rate,
+	0.002 as fuli_sale_rate
+from 
+	(
+	select 
+		b.work_no,b.sales_name,coalesce(c.income_type,'Q1') as income_type,
+		sum(a.sales_value) as ytd,
+		sum(a.ripei_bbc_sales_value) as ripei_bbc_ytd,
+		sum(a.fuli_sales_value) as fuli_ytd
+	from 
+		(
+		select 
+			customer_no,regexp_replace(last_day(to_date(from_unixtime(unix_timestamp(sdt,'yyyyMMdd')))),'-','') as sdt_last,
+			sum(case when dc_code !='W0K4' then sales_value else 0 end) as sales_value, --202107月签呈，W0K4仓不计算销售额，仅计算定价毛利额，每月处理
+			sum(case when dc_code !='W0K4' and business_type_code in('1','6','4') then sales_value else 0 end) as ripei_bbc_sales_value,
+			sum(case when dc_code !='W0K4' and business_type_code in('2') then sales_value else 0 end) as fuli_sales_value
+		from 
+			csx_dw.dws_sale_r_d_detail
+		where 
+			sdt>=${hiveconf:year_start_day} and sdt<=${hiveconf:month_end_day}
+			and channel_code in('1','7','9')
+			and goods_code not in ('8718','8708','8649') --202112月签呈，剔除飞天茅台酒销售额及定价毛利额，每月,'8718','8708','8649'
+			--安徽省城市服务商2.0，按大客户提成方案计算
+			and (business_type_code in('1','2','6') or (business_type_code in ('4') and customer_no in
+				('117817','120939','121298','121625','122567','123244','124473','124498','124601')))
+		group by 
+			customer_no,regexp_replace(last_day(to_date(from_unixtime(unix_timestamp(sdt,'yyyyMMdd')))),'-','')
+		)a 
+		left join   --CRM客户信息取每月最后一天
+			(
+			select 
+				sdt,customer_no,customer_name,work_no,sales_name,
+				case when channel_code='9' then '业务代理' end as ywdl_cust,
+				case when (customer_name like '%内%购%' or customer_name like '%临保%') then '内购' end as ng_cust	
+			from 
+				csx_dw.dws_crm_w_a_customer 
+			where 
+				sdt>=${hiveconf:year_start_day}
+				and sdt<=${hiveconf:month_end_day}
+				and customer_no !=''
+				--and sdt=regexp_replace(last_day(to_date(from_unixtime(unix_timestamp(sdt,'yyyyMMdd')))),'-','') --每月最后一天
+				and sdt='20220124'
+			)b on b.customer_no=a.customer_no and b.sdt=a.sdt_last 	
+		left join 
+			(
+			select 
+				distinct work_no,income_type 
+			from 
+				csx_tmp.sales_income_info 
+			where 
+				sdt=${hiveconf:month_end_day}
+			) c on c.work_no=b.work_no   --上月最后1日
+	where 
+		b.ywdl_cust is null -- 剔除业务代理和内购 or b.customer_no in ('118689','116957','116629'))
+		and b.ng_cust is null
+	group by 
+		b.work_no,b.sales_name,coalesce(c.income_type,'Q1')
+	)a
+;
+
+-- 客户本月销售额、定价毛利额统计
+drop table csx_tmp.tc_new_cust_00;
+create table csx_tmp.tc_new_cust_00
+as
+select 
+	b.sales_province_name,a.customer_no,b.customer_name,d.work_no,d.sales_name,d.is_part_time_service_manager,
+	d.service_user_work_no,d.service_user_name,
+	d.sales_sale_rate,  --销售员_销售额分配比例
+	d.sales_profit_rate,  --销售员_定价毛利额分配比例
+	d.service_user_sale_rate,  --服务管家_销售额分配比例
+	d.service_user_profit_rate,	 --服务管家_定价毛利额分配比例
+	a.smonth,
+	coalesce(c.ripei_bbc_sale_rate,0.002) ripei_bbc_sale_rate, --日配&bbc提成比例
+	coalesce(c.fuli_sale_rate,0.002) fuli_sale_rate, --福利提成比例
+	-- 销售额
+	sum(sales_value)sales_value, -- 总销售额
+	sum(ripei_bbc_sales_value) as ripei_bbc_sales_value, -- 日配&bbc销售额
+	sum(fuli_sales_value) as fuli_sales_value, -- 福利销售额
+	-- 定价毛利额
+	sum(profit) as profit,-- 总定价毛利额
+	sum(ripei_bbc_profit) as ripei_bbc_profit,-- 日配&bbc定价毛利额
+	sum(fuli_profit) as fuli_profit,-- 福利定价毛利额
+	--定价毛利率
+	sum(profit)/abs(sum(sales_value)) as prorate, -- 总定价毛利率
+	sum(ripei_bbc_profit)/abs(sum(ripei_bbc_sales_value)) as ripei_bbc_prorate, -- 日配&bbc定价毛利率
+	sum(fuli_profit)/abs(sum(fuli_sales_value)) as fuli_prorate-- 福利定价毛利率
+from 
+	(
+	select 
+		customer_no,substr(sdt,1,6) as smonth,
+		-- 各类型销售额
+		sum(case when dc_code !='W0K4' then sales_value else 0 end) as sales_value, --202107月签呈，W0K4仓不计算销售额，仅计算定价毛利额，每月处理
+		sum(case when dc_code !='W0K4' and business_type_code in('1','6','4') then sales_value else 0 end) as ripei_bbc_sales_value,
+		sum(case when dc_code !='W0K4' and business_type_code in('2') then sales_value else 0 end) as fuli_sales_value,
+		-- 各类型定价毛利额
+		sum(case when dc_code !='W0K4' then profit else 0 end) as profit, 
+		sum(case when dc_code !='W0K4' and business_type_code in('1','6','4') then profit else 0 end) as ripei_bbc_profit,
+		sum(case when dc_code !='W0K4' and business_type_code in('2') then profit else 0 end) as fuli_profit
+	from 
+		csx_dw.dws_sale_r_d_detail
+	where 
+		sdt>=${hiveconf:month_start_day} and sdt<=${hiveconf:month_end_day}
+		and channel_code in('1','7','9')
+		and goods_code not in ('8718','8708','8649') --202112月签呈，剔除飞天茅台酒销售额及定价毛利额，每月,'8718','8708','8649'
+		--安徽省城市服务商2.0，按大客户提成方案计算
+		and (business_type_code in('1','2','6') or (business_type_code in ('4') and customer_no in
+			('117817','120939','121298','121625','122567','123244','124473','124498','124601')))		
+	group by 
+		sdt,substr(sdt,1,6),province_name,customer_no	
+	)a
+	left join 
+		(
+		select 
+			distinct customer_no,customer_name,work_no,sales_name,
+			sales_province_name,
+			case when channel_code='9' then '业务代理' end as ywdl_cust,
+			case when (customer_name like '%内%购%' or customer_name like '%临保%') then '内购' end as ng_cust
+		from 
+			csx_dw.dws_crm_w_a_customer 
+		where 
+			sdt=${hiveconf:month_end_day}
+			and customer_no !=''
+		)b on b.customer_no=a.customer_no
+	left join 
+		(
+		select  
+			distinct work_no,sales_name,income_type,ytd,ripei_bbc_ytd,fuli_ytd,ripei_bbc_sale_rate,fuli_sale_rate
+		from 
+			csx_tmp.tc_sales_rate_ytd 
+		)c on c.work_no=b.work_no and c.sales_name=b.sales_name
+	--关联服务管家
+	left join		
+		(  
+		select 
+			distinct customer_no,service_user_work_no,service_user_name,
+			work_no,sales_name,is_part_time_service_manager,
+			sales_sale_rate,  --销售员_销售额分配比例
+			sales_profit_rate,  --销售员_定价毛利额分配比例
+			service_user_sale_rate,  --服务管家_销售额分配比例
+			service_user_profit_rate	 --服务管家_定价毛利额分配比例
+		from 
+			csx_tmp.tc_customer_service_manager_info_new
+		)d on d.customer_no=a.customer_no
+where 
+	b.ywdl_cust is null -- or b.customer_no in ('118689','116957','116629'))
+	and b.ng_cust is null
+group by 
+	b.sales_province_name,a.customer_no,b.customer_name,d.work_no,d.sales_name,d.is_part_time_service_manager,
+	d.service_user_work_no,d.service_user_name,
+	d.sales_sale_rate,  --销售员_销售额分配比例
+	d.sales_profit_rate,  --销售员_前端毛利分配比例
+	d.service_user_sale_rate,  --服务管家_销售额分配比例
+	d.service_user_profit_rate,	 --服务管家_前端毛利分配比例
+	a.smonth,coalesce(c.ripei_bbc_sale_rate,0.002),coalesce(c.fuli_sale_rate,0.002);
+
+
+-- 销售员本月定价毛利率，计算销售员定价毛利额提成比例
+drop table csx_tmp.tc_sales_profit_rate;
+create table csx_tmp.tc_sales_profit_rate
+as
+select
+	work_no,sales_name,sales_value,ripei_bbc_sales_value,fuli_sales_value,profit,ripei_bbc_profit,fuli_profit,
+	prorate as prorate_sale,
+	ripei_bbc_prorate as ripei_bbc_prorate_sale,
+	fuli_prorate as fuli_prorate_sale,
+	-- 日配&bbc定价毛利额提成比例
+	case when ripei_bbc_prorate<0.08 then 0
+		when ripei_bbc_prorate>=0.08 and ripei_bbc_prorate<0.12 then 0.03
+		when ripei_bbc_prorate>=0.12 and ripei_bbc_prorate<0.15 then 0.033
+		when ripei_bbc_prorate>=0.15 and ripei_bbc_prorate<0.18 then 0.035
+		when ripei_bbc_prorate>=0.18 and ripei_bbc_prorate<0.2 then 0.04
+		when ripei_bbc_prorate>=0.2 then 0.05
+		else 0 
+	end as ripei_bbc_profit_rate,
+	-- 福利定价毛利额提成比例
+	case when fuli_prorate<0.03 then 0
+		when fuli_prorate>=0.03 and fuli_prorate<0.05 then 0.02
+		when fuli_prorate>=0.05 and fuli_prorate<0.08 then 0.025
+		when fuli_prorate>=0.08 and fuli_prorate<0.1 then 0.03
+		when fuli_prorate>=0.1 and fuli_prorate<0.15 then 0.04
+		when fuli_prorate>=0.15 then 0.05
+		else 0 
+	end as fuli_profit_rate
+from
+	(
+	select 	
+		work_no,sales_name,
+		-- 销售额
+		sum(sales_value)sales_value, -- 总销售额
+		sum(ripei_bbc_sales_value) as ripei_bbc_sales_value, -- 日配&bbc销售额
+		sum(fuli_sales_value) as fuli_sales_value, -- 福利销售额
+		-- 定价毛利额
+		sum(profit) as profit,-- 总定价毛利额
+		sum(ripei_bbc_profit) as ripei_bbc_profit,-- 日配&bbc定价毛利额
+		sum(fuli_profit) as fuli_profit,-- 福利定价毛利额
+		--定价毛利率
+		sum(profit)/abs(sum(sales_value)) as prorate, -- 总定价毛利率
+		sum(ripei_bbc_profit)/abs(sum(ripei_bbc_sales_value)) as ripei_bbc_prorate, -- 日配&bbc定价毛利率
+		sum(fuli_profit)/abs(sum(fuli_sales_value)) as fuli_prorate-- 福利定价毛利率
+	from
+		csx_tmp.tc_new_cust_00
+	group by 
+		work_no,sales_name
+	) a 
+;
+
+
+--客户当月提成，未乘分配比例
+
+drop table csx_tmp.tc_new_cust_salary_00;
+create table csx_tmp.tc_new_cust_salary_00
+as
+select 
+	a.smonth,a.sales_province_name,a.customer_no,a.customer_name,a.work_no,a.sales_name,a.is_part_time_service_manager,a.service_user_work_no,a.service_user_name,
+	a.sales_value,a.ripei_bbc_sales_value,a.fuli_sales_value,
+	a.profit,a.ripei_bbc_profit,a.fuli_profit,
+	a.prorate,a.ripei_bbc_prorate,a.fuli_prorate,e.ripei_bbc_prorate_sale,e.fuli_prorate_sale,
+	coalesce(a.ripei_bbc_sales_value*a.ripei_bbc_sale_rate,0)+coalesce(a.fuli_sales_value*a.fuli_sale_rate,0) as salary_sales_value, -- 奖金包_销售额
+	coalesce(a.ripei_bbc_profit*e.ripei_bbc_profit_rate,0)+coalesce(a.fuli_profit*e.fuli_profit_rate,0) as salary_profit, --奖金包_定价毛利额
+	b.receivable_amount,b.overdue_amount,
+	if(a.service_user_work_no<>'','服务管家有提成','服务管家无提成') assigned_type, --分配类别
+	a.sales_sale_rate,a.sales_profit_rate,a.service_user_sale_rate,a.service_user_profit_rate,
+	coalesce(c.over_rate,0) as sale_over_rate,
+	coalesce(d.over_rate,0) as service_user_over_rate
+from  
+	(
+	select 
+		sales_province_name,customer_no,customer_name,work_no,sales_name,is_part_time_service_manager,
+		service_user_work_no,service_user_name,
+		sales_sale_rate,sales_profit_rate,service_user_sale_rate,service_user_profit_rate,
+		smonth,sales_value,ripei_bbc_sales_value,fuli_sales_value,profit,ripei_bbc_profit,fuli_profit,prorate,ripei_bbc_prorate,fuli_prorate,
+		ripei_bbc_sale_rate,fuli_sale_rate
+	from 
+		csx_tmp.tc_new_cust_00
+	)a
+	left join csx_tmp.tc_cust_over_rate b on b.customer_no=a.customer_no
+	left join csx_tmp.tc_salesname_over_rate c on c.sales_name=a.sales_name and coalesce(c.work_no,0)=coalesce(a.work_no,0)
+	left join csx_tmp.tc_service_user_over_rate d on d.service_user_name=a.service_user_name and coalesce(d.service_user_work_no,0)=coalesce(a.service_user_work_no,0)
+	left join csx_tmp.tc_sales_profit_rate e on e.work_no=a.work_no
+;
+
+--客户当月提成，乘分配比例
+
+drop table csx_tmp.tc_new_cust_salary; --11
+create table csx_tmp.tc_new_cust_salary
+as
+select 
+	a.smonth,a.sales_province_name,a.customer_no,a.customer_name,a.work_no,a.sales_name,a.is_part_time_service_manager,a.service_user_work_no,a.service_user_name,
+	a.sales_value,a.ripei_bbc_sales_value,a.fuli_sales_value,
+	a.profit,a.ripei_bbc_profit,a.fuli_profit,
+	a.prorate,a.ripei_bbc_prorate,a.fuli_prorate,
+	a.ripei_bbc_prorate_sale,a.fuli_prorate_sale,
+	a.salary_sales_value, -- 奖金包_销售额
+	a.salary_profit, --奖金包_定价毛利额
+	a.receivable_amount,a.overdue_amount,
+	a.assigned_type, --分配类别
+	a.sales_sale_rate,a.sales_profit_rate,a.service_user_sale_rate,a.service_user_profit_rate,
+	a.sale_over_rate,
+	a.service_user_over_rate,
+	--提成_销售额_销售员
+	a.salary_sales_value*(1-coalesce(if(a.sale_over_rate<=0.5,a.sale_over_rate,1),0))*coalesce(a.sales_sale_rate,0) as salary_sales_value_sale, --提成_销售额_销售员
+	--提成_销售额_服务管家
+	a.salary_sales_value*(1-coalesce(if(a.service_user_over_rate<=0.5,a.service_user_over_rate,1),0))*coalesce(a.service_user_sale_rate,0) salary_sales_value_service,--提成_销售额_服务管家
+	--提成_定价毛利额_销售员
+	a.salary_profit*(1-coalesce(if(a.sale_over_rate<=0.5,a.sale_over_rate,1),0))*coalesce(a.sales_profit_rate,0) salary_profit_sale,--提成_定价毛利额_销售员
+	--提成_定价毛利额_服务管家
+	a.salary_profit*(1-coalesce(if(a.service_user_over_rate<=0.5,a.service_user_over_rate,1),0))*coalesce(a.service_user_profit_rate,0) salary_profit_service --提成_定价毛利额_服务管家
+from
+	csx_tmp.tc_new_cust_salary_00 a 
+;
+
+
+--客户当月提成
+insert overwrite directory '/tmp/zhangyanpeng/tc_kehu' row format delimited fields terminated by '\t'
+select 
+	smonth,sales_province_name,customer_no,customer_name,work_no,sales_name,is_part_time_service_manager,service_user_work_no,service_user_name,sales_value,ripei_bbc_sales_value,fuli_sales_value,
+	profit,ripei_bbc_profit,fuli_profit,prorate,ripei_bbc_prorate,fuli_prorate,ripei_bbc_prorate_sale,fuli_prorate_sale,salary_sales_value,salary_profit,receivable_amount,overdue_amount,assigned_type,sales_sale_rate,sales_profit_rate,service_user_sale_rate,
+	service_user_profit_rate,sale_over_rate,service_user_over_rate,salary_sales_value_sale,salary_sales_value_service,salary_profit_sale,salary_profit_service,
+	coalesce(salary_sales_value_sale,0)+coalesce(salary_profit_sale,0) as total_sale,
+	coalesce(salary_sales_value_service,0)+coalesce(salary_profit_service,0) as total_service
+from
+	csx_tmp.tc_new_cust_salary
+;
+
+--销售员当月提成
+insert overwrite directory '/tmp/zhangyanpeng/tc_xiaoshou' row format delimited fields terminated by '\t'
+
+select
+	a.smonth,a.sales_province_name,a.work_no,a.sales_name,
+	b.ytd,b.ripei_bbc_ytd,b.fuli_ytd,
+	a.sales_value,
+	a.ripei_bbc_sales_value,
+	a.fuli_sales_value,
+	a.profit,
+	a.ripei_bbc_profit,
+	a.fuli_profit,
+	a.prorate,
+	a.ripei_bbc_prorate,
+	a.fuli_prorate,
+	a.salary_sales_value,
+	a.salary_profit,
+	a.receivable_amount,
+	a.overdue_amount,
+	a.sale_over_rate,
+	a.salary_sales_value_sale,
+	a.salary_profit_sale,
+	a.salary_sale
+from
+	(
+	select
+		smonth,sales_province_name,work_no,sales_name,
+		sum(sales_value)sales_value,
+		sum(ripei_bbc_sales_value) as ripei_bbc_sales_value,
+		sum(fuli_sales_value) as fuli_sales_value,
+		sum(profit)profit,
+		sum(ripei_bbc_profit) as ripei_bbc_profit,
+		sum(fuli_profit) as fuli_profit,
+		sum(profit)/abs(sum(sales_value)) as prorate,
+		sum(ripei_bbc_profit)/abs(sum(ripei_bbc_sales_value)) as ripei_bbc_prorate,
+		sum(fuli_profit)/abs(sum(fuli_sales_value)) as fuli_prorate,
+		sum(salary_sales_value) as salary_sales_value,
+		sum(salary_profit) as salary_profit,
+		sum(receivable_amount) as receivable_amount,
+		sum(overdue_amount) as overdue_amount,
+		sale_over_rate,
+		sum(salary_sales_value_sale) as salary_sales_value_sale,
+		sum(salary_profit_sale) as salary_profit_sale,
+		coalesce(sum(salary_sales_value_sale),0)+coalesce(sum(salary_profit_sale),0) salary_sale
+	from 
+		csx_tmp.tc_new_cust_salary
+	group by 
+		smonth,sales_province_name,work_no,sales_name,sale_over_rate
+	) a 
+	left join 
+		(
+		select  
+			distinct work_no,sales_name,income_type,ytd,ripei_bbc_ytd,fuli_ytd,ripei_bbc_sale_rate,fuli_sale_rate
+		from 
+			csx_tmp.tc_sales_rate_ytd 
+		)b on b.work_no=a.work_no and b.sales_name=a.sales_name	
+;
+
+--服务管家当月提成
+insert overwrite directory '/tmp/zhangyanpeng/tc_fuwuguanjia' row format delimited fields terminated by '\t'
+select
+	smonth,sales_province_name,service_user_work_no,service_user_name,
+	sum(sales_value)sales_value,
+	sum(ripei_bbc_sales_value) as ripei_bbc_sales_value,
+	sum(fuli_sales_value) as fuli_sales_value,
+	sum(profit)profit,
+	sum(ripei_bbc_profit) as ripei_bbc_profit,
+	sum(fuli_profit) as fuli_profit,
+	sum(profit)/abs(sum(sales_value)) as prorate,
+	sum(ripei_bbc_profit)/abs(sum(ripei_bbc_sales_value)) as ripei_bbc_prorate,
+	sum(fuli_profit)/abs(sum(fuli_sales_value)) as fuli_prorate,
+	sum(salary_sales_value) as salary_sales_value,
+	sum(salary_profit) as salary_profit,
+	sum(receivable_amount) as receivable_amount,
+	sum(overdue_amount) as overdue_amount,
+	service_user_over_rate,
+	sum(salary_sales_value_service) as salary_sales_value_service,
+	sum(salary_profit_service) as salary_profit_service,
+	coalesce(sum(salary_sales_value_service),0)+coalesce(sum(salary_profit_service),0) salary_service
+from 
+	csx_tmp.tc_new_cust_salary
+group by 
+	smonth,sales_province_name,service_user_work_no,service_user_name,service_user_over_rate
+;
+
+
+--===============================================================================================================================================================================
+
+
+/*
+-- 大客户提成：月度新客户
+select 
+	b.sales_province_name,b.customer_no,b.customer_name,b.attribute_desc,b.dev_source_name,b.work_no,b.sales_name,b.sign_date,
+	a.first_order_date
+from
+	(
+	select 
+		attribute_desc,dev_source_name,customer_no,customer_name,channel_name,sales_name,work_no,sales_province_name,
+		regexp_replace(split(first_sign_time, ' ')[0], '-', '') as sign_date,estimate_contract_amount*10000 estimate_contract_amount
+	from 
+		csx_dw.dws_crm_w_a_customer
+	where 
+		sdt='current'
+		and customer_no<>''
+		and channel_code in('1','7','8')
+	)b
+	join --客户最早销售月 新客月、新客季度
+		(
+		select 
+			customer_no,
+			min(first_order_date) first_order_date
+		from 
+			csx_dw.dws_crm_w_a_customer_active
+		where 
+			sdt = 'current'
+		group by 
+			customer_no
+		having 
+			min(first_order_date)>='20211201' and min(first_order_date)<='20211231'
+		)a on b.customer_no=a.customer_no;
+
+--客户对应销售员与服务管家
+insert overwrite directory '/tmp/zhangyanpeng/linshi01' row format delimited fields terminated by '\t'
+select 
+	* 
+from  
+	csx_dw.report_crm_w_a_customer_service_manager_info_new
+where  
+	sdt= '20220124'
+	and channel_code in('1','7')
+	and (is_sale='是' or is_overdue='是')
+	
+
+--大客户销售员对照表
+insert overwrite directory '/tmp/zhangyanpeng/linshi01' row format delimited fields terminated by '\t'
+select 
+	sales_province_name,customer_no,customer_name,work_no,sales_name,dev_source_name,
+	city_group_name,channel_name,
+	regexp_replace(split(first_sign_time, ' ')[0], '-', '') as first_sign_date,
+	regexp_replace(split(sign_time, ' ')[0], '-', '') as sign_date
+from 
+	csx_dw.dws_crm_w_a_customer
+	--where sdt='20210617'
+where 
+	sdt=${hiveconf:i_sdate_11}  
+	and channel_code in('1','7','8','9');
+
+
+
+
+---截至上月销售员的累计销售额
+drop table csx_dw.dws_cust_ytd_sale;
+create table csx_dw.dws_cust_ytd_sale
+as
+--insert overwrite directory '/tmp/raoyanhua/linshi01' row format delimited fields terminated by '\t'
+select b.work_no,b.sales_name,a.smonth,c.income_type,
+sum(a.sales_value)sales_value,
+sum(a.profit)profit
+from 
+  (select customer_no,substr(sdt,1,6) smonth,
+  sum(sales_value) sales_value,
+  sum(profit)profit
+   from csx_dw.dws_sale_r_d_detail
+  where sdt>='20210101' and sdt<=${hiveconf:i_sdate_11}  
+  and channel_code in('1','7','9')
+  and business_type_code not in('3','4')
+  --福建泉州签呈，订单12月销售530181.06元，1月全部退货，不算提成
+  and (order_no not in ('OM20122800005550','RH21011900000203') or order_no is null)		
+  --签呈客户不考核，不算提成 2021年3月签呈取消剔除103717
+  and customer_no not in('111118','102755','104023','105673','104402')
+  and customer_no not in('107338','104123','102629','104526','106375','106380','106335','107268','104296','108391','108390','108072','108503')		
+  --3月签呈 剔除逾期系数不算提成(其中'PF0065','112574','106782'3-5月不发提成);剔除逾期系数.不算提成.每月*2
+  and customer_no not in('115721','116877','116883','116015','116556','116826')
+  and customer_no not in('103253','103284','103296','103297','103304','103306','103311','104818','104828','104829','104835',
+                            '105113','106283','106284','106298','106299','106301','106306','106307','106308','106309','106320',
+                            '106321','106325','106326','106330','104609')	
+  --4月签呈 每月处理：剔除逾期系数，不算提成，每月处理
+  and customer_no not in('102844','117940')  
+  group by customer_no,substr(sdt,1,6)
+  )a 
+left join   --CRM客户信息取每月最后一天
+  (select * ,
+    substr(sdt,1,6) smonth,
+    case when channel_code='9' then '业务代理' end as ywdl_cust,
+    case when (customer_name like '%内%购%' or customer_name like '%临保%') then '内购' end as ng_cust	
+  from csx_dw.dws_crm_w_a_customer 
+  where sdt>=regexp_replace(trunc(date_sub(current_date,1),'YY'),'-','')  --昨日所在年第1天
+  and sdt=if(substr(sdt,1,6)=substr(regexp_replace(date_sub(current_date,1),'-',''),1,6),
+             regexp_replace(date_sub(current_date,1),'-',''),
+             regexp_replace(last_day(to_date(from_unixtime(unix_timestamp(sdt,'yyyyMMdd')))),'-','')
+             )  --sdt为每月最后一天
+  )b on b.customer_no=a.customer_no and b.smonth=a.smonth 
+left join (select distinct work_no,income_type from csx_tmp.sales_income_info where sdt=${hiveconf:i_sdate_11}) c on c.work_no=b.work_no   --上月最后1日
+--4月签呈 '118689'系统中为业务代理人，但需要人为计算销售员大客户提成,每月处理
+where (b.ywdl_cust is null or b.customer_no='118689')
+and b.ng_cust is null 
+group by b.work_no,b.sales_name,a.smonth,c.income_type;
+
+
+--1月客户销售员对照表
+insert overwrite directory '/tmp/zhangyanpeng/linshi01' row format delimited fields terminated by '\t'
+select 
+	customer_no,customer_name,sales_province_name,work_no,sales_name,service_user_work_no,service_user_name,
+	is_part_time_service_manager,sales_sale_rate,sales_profit_rate,service_user_sale_rate,service_user_profit_rate
+from  
+	csx_dw.report_crm_w_a_customer_service_manager_info_new
+where  
+	sdt= '20220124'
+	and channel_code in('1','7')
+	and (is_sale='是' or is_overdue='是')
+*/

@@ -1393,7 +1393,7 @@ left join
 
 
 -- drop table if exists csx_analyse_tmp.csx_analyse_fr_tc_customer_bill_month_dff_rate_detail;
-create temporary table csx_analyse_tmp.csx_analyse_fr_tc_customer_bill_month_dff_rate_detail as
+create  table csx_analyse_tmp.csx_analyse_fr_tc_customer_bill_month_dff_rate_detail as
 -- as
 -- insert overwrite table csx_analyse.csx_analyse_fr_tc_customer_bill_month_dff_rate_detail partition(smt)
 select 
@@ -1553,8 +1553,7 @@ group by customer_code,
     user_position_name
     ) b on a.customer_code=b.customer_code 
 left join 
- 
-    (select customer_code,
+ (select customer_code,
     user_position_name,
     if(cross_business_flag=1,0.5,1) as cross_coefficient
 from csx_analyse_tmp.csx_analyse_tmp_tc_new_customer_info a 

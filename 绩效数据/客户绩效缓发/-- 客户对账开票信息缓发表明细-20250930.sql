@@ -1,4 +1,6 @@
+-- 客户对账开票信息缓发表明细
 -- 客户对账开票信息缓发表-20250924
+-- select * from  csx_dim.csx_dim_sss_customer_statement_config where sdt='20250929' and statement_mode_code=5 关联项目制客户
 -- drop table  csx_analyse_tmp.csx_analyse_tmp_bill_settle_02;
 create table csx_analyse_tmp.csx_analyse_tmp_bill_settle_02 as 
 with  temp_company_credit as 
@@ -10,6 +12,9 @@ with  temp_company_credit as
   business_attribute_name,
   company_code,
   status,
+  account_period_code       payment_terms,  --  账期类型  Z007剔除
+  account_period_name       payment_name,   --  账期名称
+  account_period_value      payment_days,   --  帐期天数
   is_history_compensate
 from
     csx_dim.csx_dim_crm_customer_company_details
@@ -22,7 +27,10 @@ group by customer_code,
     business_attribute_name,
     company_code,
     status,
-    is_history_compensate
+    is_history_compensate,
+    account_period_code ,
+    account_period_name ,
+    account_period_value
 ) ,
 tmp_bill_order as (
   select 
@@ -181,9 +189,6 @@ WHERE
 
 ;
 
-
-
--- 客户对账开票信息缓发表明细
 -- drop table csx_analyse_tmp.csx_analyse_tmp_bill_settle_03;
 create table csx_analyse_tmp.csx_analyse_tmp_bill_settle_03 as 
 with  tmp_csx_dim_crm_customer_business_ownership as 
@@ -353,6 +358,8 @@ select source_bill_no	,
     b.no_invoice_amt,
     b.invoice_amount_all,
     b.no_invoice_amt_history,
+    b.unbill_amt_all,
+    b.no_invoice_amount_all,
     concat_ws('-',bill_start_date,bill_end_date) as bill_date_section,
     row_number()over(partition by a.customer_code ,a.business_attribute_name order by diff_confirm_days desc ) row_confirm,
     row_number()over(partition by a.customer_code ,a.business_attribute_name order by diff_invoice_days desc ) row_invoice,
@@ -410,11 +417,17 @@ select b.performance_region_code,
     invoice_amount_all,
     no_invoice_amt_history,
     unbill_amt_all,
-    no_invoice_amount_all
+    no_invoice_amount_all,
+    case when unbill_amt_all>0 and (confirm_date is null or confirm_date='') then datediff('2025-09-22',statement_date) else 0 end as no_confirm_days,
+    case when no_invoice_amount_all>0 and (invoice_date is null or invoice_date='') then datediff('2025-09-22',statement_date) else 0 end as no_invoice_days
  from tmp_csx_analyse_tmp_bill_settle a 
  left join tmp_sale_info b  on a.customer_code=b.customer_code and a.business_attribute_name=b.business_attribute_name 
- where  statement_date is not null
- group by b.performance_region_code,
+where 
+-- (diff_confirm_days>=20 or diff_invoice_days>=25)
+      statement_date<='2025-09-22'
+     and (coalesce(unbill_amt_all,0)>=1000 or coalesce(no_invoice_amount_all,0)>=1000)
+     and customer_name is not null
+    group by b.performance_region_code,
     b.performance_region_name,
     b.performance_province_code,
     b.performance_province_name,
@@ -457,304 +470,17 @@ select b.performance_region_code,
     invoice_amount_all,
     no_invoice_amt_history,
     unbill_amt_all,
-    no_invoice_amount_all
-;
-
--- 明细导了
-select * from  csx_analyse_tmp.csx_analyse_tmp_bill_settle_03 
-where customer_name is not null 
-and  (diff_confirm_days>=20 or diff_invoice_days>=25) 
-and (unbill_amt+ unbill_amount_history>=1000 or no_invoice_amt+no_invoice_amt_history>=1000)
-
-;
+    no_invoice_amount_all,
+    case when unbill_amt_all>0 and (confirm_date is null or confirm_date='') then datediff('2025-09-22',statement_date) else 0 end ,
+    case when no_invoice_amount_all>0 and (invoice_date is null or invoice_date='') then datediff('2025-09-22',statement_date) else 0 end 
+    ;
 
 
 
--- 1、需要处理的字段(a.unbill_amt+a.unbill_amount_history)  有错误值，需要做特殊处理
--- 2、剔除项目制、预付款客户
--- 3、剔除对账单号对账金额与单据金额一致的单号
--- 结果表
--- desc  csx_dws.csx_dws_sss_order_credit_invoice_bill_settle_detail_di
-create table  csx_analyse_tmp.csx_analyse_tmp_bill_settle_04 as 
-with tmp_csx_analyse_tmp_bill_settle as (
-  select
-    performance_region_code,
-    performance_region_name,
-    performance_province_code,
-    performance_province_name,
-    performance_city_code,
-    performance_city_name ,
-    customer_code,
-    customer_name,
-    credit_code,
-    company_code,
-    business_attribute_name,
-    work_no_new,
-    sales_name_new,
-    service_user_work_no,
-    service_user_name,
-    bill_code,
-    source_bill_no,
-    reconciliation_period,
-    statement_date,
-    happen_date,
-    bill_date_section,
-    order_amt	,
-    statement_amount	,
-    kp_amount	,
-    confirm_date,
-    diff_confirm_days,
-    invoice_date,
-    diff_invoice_days,
-    row_confirm,
-    row_invoice,
-    order_total_amt,
-    bill_total_amt,
-    kp_total_amt,
-    last_sale_amt,
-    bill_amt_all,
-    last_bill_amt,
-    unbill_amt,
-    unbill_amount_history,
-    invoice_amount,
-    no_invoice_amt,
-    invoice_amount_all,
-    no_invoice_amt_history,
-    row_number() over(partition by customer_code,business_attribute_name order by  cast(diff_confirm_days as int) desc  ) diff_confirm_days_ro,
-    row_number() over(partition by customer_code,business_attribute_name order by cast(diff_invoice_days as int) desc  ) diff_invoice_days_ro,
-    row_number() over(partition by customer_code, business_attribute_name) rn
-  from
-    csx_analyse_tmp.csx_analyse_tmp_bill_settle_03
-    where (diff_confirm_days>=20 or diff_invoice_days>=25)
-     and (unbill_amt+ unbill_amount_history>=1000 or no_invoice_amt+no_invoice_amt_history>=1000)
-     and customer_name is not null 
-),
-
-tmp_ruslt_01 as (
-  select
-    a.performance_region_code,
-    a.performance_region_name,
-    a.performance_province_code,
-    a.performance_province_name,
-    a.performance_city_code,
-    a.performance_city_name,
-    a.customer_code,
-    a.customer_name,
-    a.business_attribute_name,
-    a.work_no_new,
-    a.sales_name_new,
-    a.service_user_work_no,
-    a.service_user_name,
-    a.reconciliation_period ,
-    b.statement_date,
-    -- a.bill_amt,
-    b.confirm_date,
-    b.diff_confirm_days,
-    b.statement_amount,
-    a.last_sale_amt, -- 上一结算期销售金额 
-    a.last_bill_amt,     -- 上一结算期对账金额 
-    a.unbill_amt,    -- 上一结算期未对账金额
-    a.bill_amt_all, -- 历史对账金额 
-    a.unbill_amount_history,   -- 历史未对帐金额
-    if(a.unbill_amt+a.unbill_amount_history = 0, '是', '否') as confirm_flag,   -- 是否完成对账
-    c.statement_date as invoice_statement_date,     -- 开票对账日期
-    c.invoice_date as max_invoice_date,             -- 开票日期
-    c.diff_invoice_days,                            -- 开票天数
-    c.kp_amount,                                    -- 开票金额
-    a.invoice_amount    ,                           -- 上一期开票金额
-    a.no_invoice_amt,                               -- 上一期未开票金额
-    a.invoice_amount_all,                           -- 历史开票金额
-    a.no_invoice_amt_history,                       -- 历史未开票金额
-    if(a.no_invoice_amt+a.no_invoice_amt_history = 0, '是', '否') kp_flag,
-    case  when (a.unbill_amt+a.unbill_amount_history) = 0   and (a.no_invoice_amt+a.no_invoice_amt_history) = 0 then '否'
-      else if(coalesce(b.diff_confirm_days, 0) > 20   and coalesce(b.diff_confirm_days, 0) <= 50, '是',  '否'  )  end as tc_bill_type,
-    -- 对账缓发
-    case when  (a.unbill_amt+a.unbill_amount_history) = 0  and (a.no_invoice_amt+a.no_invoice_amt_history) = 0 then '否'
-      else if(coalesce(b.diff_confirm_days, 0) > 50, '是', '否')
-    end as tc_history_bill_type,
-    -- 对账扣发
-    case when  (a.unbill_amt+a.unbill_amount_history) = 0  and (a.no_invoice_amt+a.no_invoice_amt_history) = 0 then '否'
-      else 
-      if( coalesce(c.diff_invoice_days, 0) > 25   and coalesce(c.diff_invoice_days, 0) <= 55,  '是', '否' )  end tc_invoice_type,
-    case
-      when  (a.unbill_amt+a.unbill_amount_history) = 0
-      and (a.no_invoice_amt+a.no_invoice_amt_history) = 0 then '否'
-      else if(coalesce(c.diff_invoice_days, 0) > 55, '是', '否')
-    end tc_history_invoice_type 
-    -- if( coalesce(b.diff_confirm_days,0)<=50  and c.tc_bill_type='是' ,'是','否') as  tc_reissue_bill_type,  -- 对账扣发
-    -- if( coalesce(b.diff_invoice_days,0) <=55 and c.tc_invoice_type='是' ,'是','否') tc_reissue_invoice_type,
-  from
-(
- select
-    performance_region_code,
-    performance_region_name,
-    performance_province_code,
-    performance_province_name,
-    performance_city_code,
-    performance_city_name ,
-    customer_code,
-    customer_name,
-    business_attribute_name,
-    work_no_new,
-    sales_name_new,
-    service_user_work_no,
-    service_user_name,
-    reconciliation_period,
-    sum(last_sale_amt) last_sale_amt,
-    sum(bill_amt_all) bill_amt_all,
-    sum(last_bill_amt) last_bill_amt,
-    sum(unbill_amt) unbill_amt,
-    sum(unbill_amount_history) unbill_amount_history,
-    sum(invoice_amount) invoice_amount,
-    sum(no_invoice_amt) no_invoice_amt,
-    sum(invoice_amount_all) invoice_amount_all,
-    sum(no_invoice_amt_history) no_invoice_amt_history
-from
-( select
-    performance_region_code,
-    performance_region_name,
-    performance_province_code,
-    performance_province_name,
-    performance_city_code,
-    performance_city_name ,
-    customer_code,
-    customer_name,
-    business_attribute_name,
-    work_no_new,
-    sales_name_new,
-    service_user_work_no,
-    service_user_name,
-    reconciliation_period,
-    (last_sale_amt) last_sale_amt,
-    (bill_amt_all) bill_amt_all,
-    (last_bill_amt) last_bill_amt,
-    (unbill_amt) unbill_amt,
-    (unbill_amount_history) unbill_amount_history,
-    (invoice_amount) invoice_amount,
-    (no_invoice_amt) no_invoice_amt,
-    (invoice_amount_all) invoice_amount_all,
-    (no_invoice_amt_history) no_invoice_amt_history
-from
-    tmp_csx_analyse_tmp_bill_settle
- group by performance_region_code,
-    performance_region_name,
-    performance_province_code,
-    performance_province_name,
-    performance_city_code,
-    performance_city_name ,
-    customer_code,
-    customer_name,
-    business_attribute_name,
-    work_no_new,
-    sales_name_new,
-    service_user_work_no,
-    service_user_name,
-    reconciliation_period,
-    last_sale_amt,
-bill_amt_all,
-last_bill_amt,
-(unbill_amt) ,
-(unbill_amount_history) ,
-(invoice_amount) ,
-(no_invoice_amt) ,
-(invoice_amount_all) ,
-(no_invoice_amt_history)
-) a 
-    group by performance_region_code,
-    performance_region_name,
-    performance_province_code,
-    performance_province_name,
-    performance_city_code,
-    performance_city_name ,
-    customer_code,
-    customer_name,
-    business_attribute_name,
-    work_no_new,
-    sales_name_new,
-    service_user_work_no,
-    service_user_name,
-    reconciliation_period 
-) a
-    left join (
-      select
-        *
-      from
-        tmp_csx_analyse_tmp_bill_settle
-      where
-        diff_confirm_days_ro = 1
-    ) b on a.customer_code = b.customer_code
-    and a.business_attribute_name = b.business_attribute_name
-    left join (
-      select
-        *
-      from
-        tmp_csx_analyse_tmp_bill_settle
-      where
-        diff_invoice_days_ro = 1
-    ) c on a.customer_code = c.customer_code
-    and a.business_attribute_name = c.business_attribute_name -- where a.customer_code='124059'
-   
-)
-select
-  a.performance_region_code,
-  a.performance_region_name,
-  a.performance_province_code,
-  a.performance_province_name,
-  a.performance_city_code,
-  a.performance_city_name,
-  a.customer_code,
-  a.customer_name,
-  a.business_attribute_name,
-  a.work_no_new,
-  a.sales_name_new,
-  a.service_user_work_no,
-  a.service_user_name,
-  reconciliation_period,
-  statement_date,
-  -- a.bill_amt,
-  confirm_date,
-  diff_confirm_days,
-  statement_amount,
-  a.last_sale_amt, -- 上一结算期销售金额 
-  a.last_bill_amt,     -- 上一结算期对账金额 
-  a.unbill_amt,    -- 上一结算期未对账金额
-  a.bill_amt_all, -- 历史对账金额 
-  a.unbill_amount_history,   -- 历史未对帐金额
-  confirm_flag,
-  invoice_statement_date,
-  max_invoice_date,
-  diff_invoice_days,
-  kp_amount,
-  invoice_amount    ,                           -- 上一期开票金额
-  no_invoice_amt,                               -- 上一期未开票金额
-  invoice_amount_all,                           -- 历史开票金额
-  no_invoice_amt_history,                       -- 历史未开票金额
-  kp_flag,
-  tc_bill_type,
-  -- 对账缓发
-  tc_history_bill_type,
-  -- 对账扣发
-  tc_invoice_type,
-  tc_history_invoice_type,
-  case
-    when tc_history_bill_type = '是'
-    or tc_history_invoice_type = '是' then '否'
-    when tc_bill_type = '是'
-    or tc_invoice_type = '是' then '是'
-    else '否'
-  end final_outcome_type,
-  if(
-    tc_history_bill_type = '是'
-    or tc_history_invoice_type = '是',
-    '是',
-    '否'
-  ) final_result_withheld_type
-from
-  tmp_ruslt_01 a
-;
-
+-- 结果表 
 -- 结果表逻辑调整20250929
-create table  csx_analyse_tmp.csx_analyse_tmp_bill_settle_04 as 
+-- drop table  csx_analyse_tmp.csx_analyse_tmp_bill_settle_05;
+create table  csx_analyse_tmp.csx_analyse_tmp_bill_settle_05 as 
 with tmp_csx_analyse_tmp_bill_settle as (
   select
     performance_region_code,
@@ -799,17 +525,20 @@ with tmp_csx_analyse_tmp_bill_settle as (
     no_invoice_amt,
     invoice_amount_all,
     no_invoice_amt_history,
-    coalesce(a.unbill_amt,0)+ coalesce(a.unbill_amount_history,0) as unbill_amt_all,
-    coalesce(a.no_invoice_amt,0) +coalesce( a.no_invoice_amt_history,0) as no_invoice_amount_all,
+    unbill_amt_all,
+    no_invoice_amount_all,
+    no_confirm_days,
+    no_invoice_days,
     row_number() over(partition by customer_code,business_attribute_name order by  cast(diff_confirm_days as int) desc  ) diff_confirm_days_ro,
     row_number() over(partition by customer_code,business_attribute_name order by cast(diff_invoice_days as int) desc  ) diff_invoice_days_ro,
-    
-    row_number() over(partition by customer_code, business_attribute_name) rn
+    row_number() over(partition by customer_code,business_attribute_name order by  cast(no_confirm_days as int) desc  )  diff_no_confirm_days_ro,
+    row_number() over(partition by customer_code,business_attribute_name order by cast(no_invoice_days as int) desc  ) diff_no_invoice_days_ro,
+    row_number() over(partition by customer_code, business_attribute_name order by statement_date desc ) rn
   from
     csx_analyse_tmp.csx_analyse_tmp_bill_settle_03 a
-    where (diff_confirm_days>=20 or diff_invoice_days>=25)
-     and (coalesce(unbill_amt,0)+ coalesce(unbill_amount_history,0)>=1000 or coalesce(no_invoice_amt,0)+coalesce(no_invoice_amt_history,0)>=1000)
-     and customer_name is not null 
+    -- where (diff_confirm_days>=20 or diff_invoice_days>=25)
+    --  and (unbill_amt+ unbill_amount_history>=1000 or no_invoice_amt+no_invoice_amt_history>=1000)
+    --  and customer_name is not null 
 ),
 
 tmp_ruslt_01 as (
@@ -828,21 +557,21 @@ tmp_ruslt_01 as (
     a.service_user_work_no,
     a.service_user_name,
     a.reconciliation_period ,
-    b.statement_date,
+    case when a.unbill_amt_all=0 then b.statement_date else b1.statement_date end  statement_date,
     -- a.bill_amt,
-    b.confirm_date,
-    b.diff_confirm_days,
-    b.statement_amount,
+    case when a.unbill_amt_all=0 then b.confirm_date else '' end confirm_date,
+    case when a.unbill_amt_all=0 then b.diff_confirm_days else coalesce(b1.no_confirm_days, '') end  diff_confirm_days,
+    case when a.unbill_amt_all=0 then b.statement_amount else 0 end  statement_amount,
     a.last_sale_amt, -- 上一结算期销售金额 
     a.last_bill_amt,     -- 上一结算期对账金额 
     a.unbill_amt,    -- 上一结算期未对账金额
     a.bill_amt_all, -- 历史对账金额 
     a.unbill_amount_history,   -- 历史未对帐金额
     if(coalesce(a.unbill_amt_all,0) = 0, '是', '否') as confirm_flag,   -- 是否完成对账
-    c.statement_date as invoice_statement_date,     -- 开票对账日期
-    c.invoice_date as max_invoice_date,             -- 开票日期
-    c.diff_invoice_days,                            -- 开票天数
-    c.kp_amount,                                    -- 开票金额
+    case when a.no_invoice_amount_all=0 then c.statement_date else  coalesce(c1.statement_date,'') end  as invoice_statement_date,     -- 开票对账日期
+    case when a.no_invoice_amount_all=0 then c.invoice_date else '' end as max_invoice_date,             -- 开票日期
+    case when a.no_invoice_amount_all=0 then c.diff_invoice_days else coalesce(c1.no_invoice_days , '') end   diff_invoice_days,                          -- 开票天数
+    case when a.no_invoice_amount_all=0 then c.kp_amount else  0  end      kp_amount,                          -- 开票金额
     a.invoice_amount    ,                           -- 上一期开票金额
     a.no_invoice_amt,                               -- 上一期未开票金额
     a.invoice_amount_all,                           -- 历史开票金额
@@ -859,7 +588,7 @@ tmp_ruslt_01 as (
       else 
       if( coalesce(c.diff_invoice_days, 0) > 25   and coalesce(c.diff_invoice_days, 0) <= 55,  '是', '否' )  end tc_invoice_type,
     case
-      when  coalesce(a.no_invoice_amount_all,0)= 0 then '否'
+      when  coalesce(a.no_invoice_amount_all,0)= 0  then '否'
        else if(coalesce(c.diff_invoice_days, 0) > 55, '是', '否')
     end tc_history_invoice_type 
     -- if( coalesce(b.diff_confirm_days,0)<=50  and c.tc_bill_type='是' ,'是','否') as  tc_reissue_bill_type,  -- 对账扣发
@@ -965,24 +694,76 @@ from
 -- 对账天数最大的信息
     left join (
       select
-        *
+        customer_code,
+        business_attribute_name,
+        confirm_date,
+        diff_confirm_days_ro,
+        diff_confirm_days,
+        statement_date,
+        statement_amount
       from
         tmp_csx_analyse_tmp_bill_settle
       where
-        diff_confirm_days_ro = 1
+        diff_confirm_days_ro = 1 
     ) b on a.customer_code = b.customer_code
     and a.business_attribute_name = b.business_attribute_name
+-- 对账天数最大的信息,对账未完成的 unbill_amt_all不等于0
+    left join (
+      select
+        customer_code,
+        business_attribute_name,
+        confirm_date,
+        diff_confirm_days_ro,
+        diff_confirm_days,
+        statement_date,
+        statement_amount,
+        no_confirm_days,
+        diff_no_confirm_days_ro
+      from
+        tmp_csx_analyse_tmp_bill_settle
+      where
+         diff_no_confirm_days_ro=1
+    ) b1 on a.customer_code = b1.customer_code
+    and a.business_attribute_name = b1.business_attribute_name
 -- 开票天数最大信息
     left join (
       select
-        *
+        customer_code,
+        business_attribute_name,
+        confirm_date,
+        diff_confirm_days_ro,
+        diff_confirm_days,
+        statement_date,
+        kp_amount,
+        no_invoice_days,
+        invoice_date,
+        diff_invoice_days,
+        diff_invoice_days_ro
       from
         tmp_csx_analyse_tmp_bill_settle
       where
-        diff_invoice_days_ro = 1
+         diff_invoice_days_ro = 1
     ) c on a.customer_code = c.customer_code
     and a.business_attribute_name = c.business_attribute_name -- where a.customer_code='124059'
-   
+-- 开票天数最大信息,未完成开票 no_invoice_amount_all不等于0
+    left join (
+      select
+        customer_code,
+        business_attribute_name,
+        confirm_date,
+        diff_confirm_days_ro,
+        diff_confirm_days,
+        statement_date,
+        kp_amount,
+        invoice_date,
+        no_invoice_days,
+        diff_invoice_days
+      from
+        tmp_csx_analyse_tmp_bill_settle
+      where
+         diff_no_invoice_days_ro=1
+    ) c1 on a.customer_code = c1.customer_code
+    and a.business_attribute_name = c1.business_attribute_name -- where a.customer_code='124059'
 )
 select
   a.performance_region_code,
@@ -1001,9 +782,9 @@ select
   reconciliation_period,
   statement_date,
   -- a.bill_amt,
-  if(confirm_flag='是','',confirm_date ) as confirm_date,
-  if(confirm_flag='是','',diff_confirm_days ) as diff_confirm_days,
-  if(confirm_flag='是','',statement_amount ) as statement_amount,
+  (confirm_date ) as confirm_date,
+  (diff_confirm_days ) as diff_confirm_days,
+  (statement_amount ) as statement_amount,
   a.last_sale_amt, -- 上一结算期销售金额 
   a.last_bill_amt,     -- 上一结算期对账金额 
   a.unbill_amt,    -- 上一结算期未对账金额
@@ -1011,9 +792,9 @@ select
   a.unbill_amount_history,   -- 历史未对帐金额
   confirm_flag,               -- 是否完全对账
   invoice_statement_date,
-  if(kp_flag='是','',max_invoice_date ) as max_invoice_date,
-  if(kp_flag='是','',diff_invoice_days ) as diff_invoice_days,
-  if(kp_flag='是','',kp_amount ) as kp_amount,
+  (max_invoice_date ) as max_invoice_date,
+  (diff_invoice_days ) as diff_invoice_days,
+  (kp_amount ) as kp_amount,
   invoice_amount    ,                           -- 上一期开票金额
   no_invoice_amt,                               -- 上一期未开票金额
   invoice_amount_all,                           -- 历史开票金额

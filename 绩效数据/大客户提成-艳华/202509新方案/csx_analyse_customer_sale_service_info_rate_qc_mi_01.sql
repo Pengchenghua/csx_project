@@ -8,6 +8,7 @@
 -- ******************************************************************** 
 
 -- 计算管家提成分配系数
+-- drop table  csx_analyse_tmp.csx_analyse_customer_sale_service_info_rate_qc_mi 
 create table  csx_analyse_tmp.csx_analyse_customer_sale_service_info_rate_qc_mi as 
 with tmp_sale_detail as 
 (
@@ -125,55 +126,45 @@ from
 	
 	where sdt=regexp_replace(last_day(add_months('2025-09-22',-1)),'-','')
 )a
-left join 
-(
-	select * 
-	-- from csx_analyse.csx_analyse_tc_customer_special_rules_mf 
-	from csx_analyse.csx_analyse_tc_customer_special_rules_2023_1mf
-	where smt=substr(regexp_replace(last_day(add_months('2025-09-22',-1)),'-',''),1,6)
-	and smt_date=substr(regexp_replace(last_day(add_months('2025-09-22',-1)),'-',''),1,6)
-	and category_first like '%大客户提成-调整对应人员比例%'
-) d on d.customer_code=a.customer_no
-where d.category_first is null
-union all 
-select 
-	biz_id,
-	customer_id,
-	customer_no,
-	customer_name,
-	channel_code,
-	channel_name,
-	region_code,
-	region_name,
-	province_code,
-	province_name,
-	city_group_code,
-	city_group_name,
-	sales_id,
-	work_no,
-	sales_name,
-	rp_service_user_id,
-	rp_service_user_work_no,
-	rp_service_user_name,
-	fl_service_user_id,
-	fl_service_user_work_no,
-	fl_service_user_name,
-	bbc_service_user_id,
-	bbc_service_user_work_no,
-	bbc_service_user_name,
-	cast(rp_sales_sale_fp_rate as decimal(20,6)) rp_sales_sale_fp_rate,
-	cast(fl_sales_sale_fp_rate as decimal(20,6)) fl_sales_sale_fp_rate,
-	cast(bbc_sales_sale_fp_rate as decimal(20,6)) bbc_sales_sale_fp_rate,
-	cast(rp_service_user_sale_fp_rate as decimal(20,6)) rp_service_user_fp_rate,
-	cast(fl_service_user_sale_fp_rate as decimal(20,6)) fl_service_user_fp_rate,
-	cast(bbc_service_user_sale_fp_rate as decimal(20,6)) bbc_service_user_fp_rate,
-	0 as customer_profit_rate,
-	0 as city_profit_rate,
-	from_utc_timestamp(current_timestamp(),'GMT') update_time,
-	smt
-from csx_analyse.csx_analyse_tc_customer_person_rate_special_rules_mf
-where smt=substr(regexp_replace(last_day(add_months('2025-09-22',-1)),'-',''),1,6)
-and smt_date=substr(regexp_replace(last_day(add_months('2025-09-22',-1)),'-',''),1,6)
+
+) ,
+tmp_position_dic as 
+(select dic_key as code,dic_value as name
+       from csx_ods.csx_ods_csx_b2b_ucenter_user_dic_df
+       where sdt=regexp_replace(date_sub(current_date(),1),'-','')
+       and dic_type = 'POSITION'
+),
+tmp_sales_info as (
+  select a.*,b.name as user_position_name,c.name as leader_position_name from 
+  (select
+    a.user_id,
+    a.user_number,
+    a.user_name,
+    a.source_user_position,
+    a.leader_user_id,
+    b.user_number as leader_user_number,
+    b.user_name as leader_user_name,
+    b.source_user_position as leader_user_position
+  from
+       csx_dim.csx_dim_uc_user a
+    left join (
+      select
+        user_id,
+        user_number,
+        user_name,
+        source_user_position
+      from
+        csx_dim.csx_dim_uc_user a
+      where
+        sdt = '20250922'
+        and status = 0
+    ) b on a.leader_user_id = b.user_id
+  where
+    sdt = '20250922'
+    and status = 0
+    )a 
+    left join tmp_position_dic b on a.source_user_position=b.code
+    left join tmp_position_dic c on a.leader_user_position=c.code
 ) 
 -- insert overwrite table   csx_analyse.csx_analyse_customer_sale_service_info_rate_qc_mi partition(smt)
 select 	biz_id,
@@ -191,6 +182,7 @@ select 	biz_id,
 	sales_id,
 	work_no,
 	sales_name,
+	c.user_position_name,
 	rp_service_user_id,
 	rp_service_user_work_no,		
 	rp_service_user_name,
@@ -218,4 +210,8 @@ select 	biz_id,
 from tmp_customer_info a 
 left join 
 (select customer_code,customer_name from csx_dim.csx_dim_crm_customer_info where sdt='current' ) b on a.customer_no=b.customer_code
+left join 
+tmp_sales_info c on a.work_no=c.user_number
 ;
+
+select * from csx_analyse_tmp.csx_analyse_customer_sale_service_info_rate_qc_mi

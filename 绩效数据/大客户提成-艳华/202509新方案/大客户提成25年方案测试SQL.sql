@@ -190,7 +190,13 @@ CASE
     WHEN a.performance_city_name IN ('厦门市', '宁波市', '泉州市', '莆田市', '南平市', '南昌市', '贵阳市', '宜宾', '武汉市') THEN 40
     WHEN a.performance_city_name IN ('三明市','阜阳市','台州市','龙岩市','万州区','江苏盐城','黔江区','永川区') then 20
     ELSE 20
-  END AS sales_person_target
+  END AS sales_person_target,
+   CASE 
+    WHEN a.performance_city_name IN ('北京市', '福州市', '重庆主城', '深圳市', '成都市', '上海松江', '南京主城', '合肥市', '西安市', 
+									'石家庄市', '江苏苏州', '杭州市','郑州市','广东广州') THEN 'A/B'
+    WHEN a.performance_city_name IN ('厦门市', '宁波市', '泉州市', '莆田市', '南平市', '南昌市', '贵阳市', '宜宾', '武汉市') THEN 'C'
+    WHEN a.performance_city_name IN ('三明市','阜阳市','台州市','龙岩市','万州区','江苏盐城','黔江区','永川区') then 'D'
+  END AS city_type_name
   from csx_dim.csx_dim_shop  a 
   where sdt='current'
   )
@@ -325,13 +331,6 @@ left join
 		rp_service_user_fp_rate,
 		fl_service_user_fp_rate,
 		bbc_service_user_fp_rate
-		-- if(rp_sales_sale_fp_rate=0.7,0.6,if(rp_sales_sale_fp_rate=0.3,0.4,if(rp_sales_sale_fp_rate=0.2,0.3,if(rp_sales_sale_fp_rate=0.1,0.2,rp_sales_sale_fp_rate)))) as rp_sales_fp_rate,
-		-- if(fl_sales_fp_rate=0.7,0.6,if(fl_sales_fp_rate=0.3,0.4,if(fl_sales_fp_rate=0.2,0.3,if(fl_sales_fp_rate=0.1,0.2,fl_sales_fp_rate)))) as fl_sales_fp_rate,
-		-- if(bbc_sales_fp_rate=0.7,0.6,if(bbc_sales_fp_rate=0.3,0.4,if(bbc_sales_fp_rate=0.2,0.3,if(bbc_sales_fp_rate=0.1,0.2,bbc_sales_fp_rate)))) as bbc_sales_fp_rate,
-		-- if(rp_service_user_sale_fp_rate=0.7,0.6,if(rp_service_user_sale_fp_rate=0.3,0.4,if(rp_service_user_sale_fp_rate=0.2,0.3,if(rp_service_user_sale_fp_rate=0.1,0.2,rp_service_user_sale_fp_rate)))) as rp_service_user_fp_rate,
-		-- if(fl_service_user_sale_fp_rate=0.7,0.6,if(fl_service_user_sale_fp_rate=0.3,0.4,if(fl_service_user_sale_fp_rate=0.2,0.3,if(fl_service_user_sale_fp_rate=0.1,0.2,fl_service_user_sale_fp_rate)))) as fl_service_user_fp_rate,
-		-- if(bbc_service_user_sale_fp_rate=0.7,0.6,if(bbc_service_user_sale_fp_rate=0.3,0.4,if(bbc_service_user_sale_fp_rate=0.2,0.3,if(bbc_service_user_sale_fp_rate=0.1,0.2,bbc_service_user_sale_fp_rate)))) as bbc_service_user_fp_rate	
-	-- from csx_analyse.csx_analyse_customer_sale_service_info_rate_use_mi
 	from csx_analyse_tmp.csx_analyse_customer_sale_service_info_rate_qc_mi
 	where smt=substr(regexp_replace(add_months('${sdt_yes_date}',-1),'-',''), 1, 6)
 )b on b.customer_no=a.customer_code
@@ -799,8 +798,7 @@ from
 		substr(regexp_replace(happen_date,'-',''),1,6) as happen_month, -- 销售月		
 		-- 202308签呈 126275 将销售日期为6.15-8.15期间的BBC，结算日调整为8.16，且最高回款系数100%
 		-- 20241220 签呈新增限制最高回款系数
-		case when a.customer_code='126275' and dff_rate_new>1 then 1
-			else dff_rate_new end as dff_rate,  -- 回款时间系数
+		dff_rate_new as dff_rate,  -- 回款时间系数
 		sum(pay_amt) pay_amt,	-- 核销金额
 		sum(case when business_type_code in (1,4,5) then pay_amt else 0 end) as rp_pay_amt,
 		sum(case when business_type_name like 'BBC%' then pay_amt else 0 end) as bbc_pay_amt,
@@ -1018,7 +1016,7 @@ left join
 
 
 
-DROP TABLE IF EXISTS csx_analyse_tmp.csx_analyse_fr_tc_customer_bill_month_dff_rate_detail_0;
+-- DROP TABLE IF EXISTS csx_analyse_tmp.csx_analyse_fr_tc_customer_bill_month_dff_rate_detail_0_test;
 
 CREATE TABLE csx_analyse_tmp.csx_analyse_fr_tc_customer_bill_month_dff_rate_detail_0_test
 AS
@@ -1125,9 +1123,11 @@ FROM calculated_data
  ;
  
 
+ 
 
 
-drop table if exists csx_analyse_tmp.csx_analyse_fr_tc_customer_bill_month_dff_rate_detail_1;
+
+-- drop table if exists csx_analyse_tmp.csx_analyse_fr_tc_customer_bill_month_dff_rate_detail_1_test;
 create  table csx_analyse_tmp.csx_analyse_fr_tc_customer_bill_month_dff_rate_detail_1_test
 as
 select 
@@ -1396,6 +1396,44 @@ left join
 create  table csx_analyse_tmp.csx_analyse_fr_tc_customer_bill_month_dff_rate_detail as
 -- as
 -- insert overwrite table csx_analyse.csx_analyse_fr_tc_customer_bill_month_dff_rate_detail partition(smt)
+with tmp_position_dic as 
+(select dic_key as code,dic_value as name
+       from csx_ods.csx_ods_csx_b2b_ucenter_user_dic_df
+       where sdt=regexp_replace(date_sub(current_date(),1),'-','')
+       and dic_type = 'POSITION'
+),
+tmp_sales_leader_info as (
+  select a.*,b.name as user_position_name,c.name as leader_position_name from 
+  (select
+    a.user_id,
+    a.user_number,
+    a.user_name,
+    a.source_user_position,
+    a.leader_user_id,
+    b.user_number as leader_user_number,
+    b.user_name as leader_user_name,
+    b.source_user_position as leader_user_position
+  from
+       csx_dim.csx_dim_uc_user a
+    left join (
+      select
+        user_id,
+        user_number,
+        user_name,
+        source_user_position
+      from
+        csx_dim.csx_dim_uc_user a
+      where
+        sdt = '20250922'
+        and status = 0
+    ) b on a.leader_user_id = b.user_id
+  where
+    sdt = '20250922'
+    and status = 0
+    )a 
+    left join tmp_position_dic b on a.source_user_position=b.code
+    left join tmp_position_dic c on a.leader_user_position=c.code
+) 
 select 
 	concat_ws('-',substr(regexp_replace(last_day(add_months('${sdt_yes_date}',-1)),'-',''),1,6),a.province_code,a.customer_code,
 	a.bill_month,a.happen_month,a.bill_date,a.paid_date,cast(a.dff_rate as string)) biz_id,
@@ -1406,11 +1444,18 @@ select
 	a.province_name,
 	a.city_group_code,
 	a.city_group_name,
+	CASE 
+    WHEN a.city_group_name IN ('北京市', '福州市', '重庆主城', '深圳市', '成都市', '上海松江', '南京主城', '合肥市', '西安市', 
+									'石家庄市', '江苏苏州', '杭州市','郑州市','广东广州') THEN 'A/B'
+    WHEN a.city_group_name IN ('厦门市', '宁波市', '泉州市', '莆田市', '南平市', '南昌市', '贵阳市', '宜宾', '武汉市') THEN 'C'
+    WHEN a.city_group_name IN ('三明市','阜阳市','台州市','龙岩市','万州区','江苏盐城','黔江区','永川区') then 'D'
+    END AS city_type_name,
 	a.customer_code,	-- 客户编码
 	a.customer_name,
 	a.sales_id,
 	a.work_no,
 	a.sales_name,
+	d.user_position_name,
 	a.rp_service_user_id,
 	a.rp_service_user_work_no,
 	a.rp_service_user_name,
@@ -1562,7 +1607,7 @@ group by customer_code,
     user_position_name,
     cross_business_flag
     ) c on a.customer_code=c.customer_code
-    
+left join  tmp_sales_leader_info d on a.work_no=d.user_number   
 group by 
 	concat_ws('-',substr(regexp_replace(last_day(add_months('${sdt_yes_date}',-1)),'-',''),1,6),a.province_code,a.customer_code,
 	a.bill_month,a.happen_month,a.bill_date,a.paid_date,cast(a.dff_rate as string)),
@@ -1578,6 +1623,7 @@ group by
 	a.sales_id,
 	a.work_no,
 	a.sales_name,
+	d.user_position_name,
 	a.rp_service_user_id,
 	a.rp_service_user_work_no,
 	a.rp_service_user_name,
@@ -1657,6 +1703,12 @@ group by
 	a.by_bbc_profit_ly,
 	a.by_fl_profit,
 	sales_coefficient,              -- 新客系数
-	cross_coefficient             -- 销售员跨业务开客提成50%;	
+	cross_coefficient ,            -- 销售员跨业务开客提成50%;	
+	CASE 
+    WHEN a.city_group_name IN ('北京市', '福州市', '重庆主城', '深圳市', '成都市', '上海松江', '南京主城', '合肥市', '西安市', 
+									'石家庄市', '江苏苏州', '杭州市','郑州市','广东广州') THEN 'A/B'
+    WHEN a.city_group_name IN ('厦门市', '宁波市', '泉州市', '莆田市', '南平市', '南昌市', '贵阳市', '宜宾', '武汉市') THEN 'C'
+    WHEN a.city_group_name IN ('三明市','阜阳市','台州市','龙岩市','万州区','江苏盐城','黔江区','永川区') then 'D'
+    END
 	
 

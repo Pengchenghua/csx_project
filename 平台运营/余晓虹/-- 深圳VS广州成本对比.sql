@@ -19,13 +19,16 @@ select
   sum(receive_qty) as receive_qty,
   sum(receive_amt) as receive_amt
 from      csx_report.csx_report_wms_order_flow_di a 
-left  join (select goods_code,goods_status_name,dc_code from csx_dim.csx_dim_basic_dc_goods 
+left  join 
+(select goods_code,goods_status_name,dc_code
+ from csx_dim.csx_dim_basic_dc_goods 
  where sdt='current'
  ) b on a.goods_code=b.goods_code and a.dc_code=b.dc_code
  LEFT JOIN 
-(select order_code,goods_code from   csx_dws.csx_dws_scm_order_detail_di
+(select order_code,goods_code 
+  from   csx_dws.csx_dws_scm_order_detail_di
 where sdt>='20250101'
-and price_type=2    -- 剔除售价下浮
+and price_type =2    -- 剔除售价下浮
 group by order_code,goods_code) c on a.goods_code=c.goods_code and a.purchase_order_code=c.ORDER_CODE
 where sdt>='20250801' and sdt<='20250914'
 and c.goods_code is null        -- 剔除售价下浮
@@ -105,9 +108,6 @@ group by a.performance_province_name,
         when  least(coalesce(gz_avg_cost,0) ,coalesce(sz_avg_cost,0) )=coalesce(gz_avg_cost,0) then '广东广州'
         else '广东深圳' end min_avg_flag
  from tmp_receive_01 a 
-  
-
-
   ;
 
 -- 明细

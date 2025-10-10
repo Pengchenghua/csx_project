@@ -35,8 +35,8 @@ left join
 	  from csx_dim.csx_dim_shop
 	    where sdt='current' 
 	 ) c on a.inventory_dc_code=c.shop_code
-  where sdt >= '20250401'
-    and sdt <= '20250630'
+  where sdt >= '20250701'
+    and sdt <= '20250930'
     -- and channel_code in ('1','9')
     and ((business_type_code=1   and  extra='采购参与' ) or channel_code=2)
     and customer_code not in ('260128','262310','262306','262305','262311','262312') 
@@ -205,8 +205,8 @@ left join
     where
       parent_code = 'direct_delivery_type') p on cast(a.direct_delivery_type as string) =  code
  
-  where sdt >= '20250401'
-    and sdt <= '20250630'
+  where sdt >= '20250701'
+    and sdt <= '20250930'
     -- and channel_code in ('1','9')
     and ((business_type_code=1   and  extra='采购参与' ) or channel_code=2)
 group by  case when classify_large_code in ('B04','B05','B06','B07','B08','B09') then '食百'else classify_large_name end ,
@@ -279,8 +279,8 @@ where
   )
 --   and a.settle_date BETWEEN '2025-01-01' AND '2025-02-28'
 --   and settle_no='FY25020800766'
-  and to_date(belong_date) >= '2025-04-01'
-  and to_date(belong_date) <= '2025-06-30'
+  and to_date(belong_date) >= '2025-07-01'
+  and to_date(belong_date) <= '2025-09-30'
  group by substr(regexp_replace(to_date(belong_date),'-',''),1,6) ,
   a.basic_performance_region_name,
   a.basic_performance_province_code,

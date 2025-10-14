@@ -107,7 +107,7 @@ FROM
   and settlement_dc_name not like '%合伙人%'
   and settlement_dc_name not like '%服务商%'
   and settlement_dc_name not like '%前置仓%'
-  -- and settlement_dc_name not like '%分仓%'
+  and settlement_dc_name not like '%分仓%'
   )
   ) a ON a.settle_code = m.settle_no
  where 

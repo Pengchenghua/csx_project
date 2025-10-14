@@ -633,6 +633,9 @@ join
 	; 
 
 
+-- AB类客户按照等级销售经理A类客户 
+-- AB类客户明细
+
 -- A类客户按照等级销售经理A类客户 
 -- A类客户明细
 with   tmp_customer_level as (select
@@ -673,6 +676,21 @@ tmp_sale_detail as   (
       AND order_channel_code <> 4
     GROUP BY customer_code
 )
+,
+tmp_terminate_info as 
+(select customer_code,terminate_date,
+row_number()over(partition by customer_code order by terminate_date desc ) as rn from 
+(select customer_code,terminate_date from csx_dim.csx_dim_crm_terminate_customer  
+    where sdt='current' 
+        and business_attribute_code=1
+        and status=2
+ union all 
+ select customer_code,terminate_date from csx_dim.csx_dim_crm_terminate_customer_attribute  
+    where sdt='current'  
+        and business_attribute_code=1
+        and approval_status=2
+) a 
+)
 select  province_name,
        city_group_name,
 			rp_leader_user_number,
@@ -711,9 +729,10 @@ from
 	coalesce(c.bbc_leader_city_user_number,'') as bbc_leader_city_user_number,
     coalesce(c.bbc_leader_city_name,'') as bbc_leader_city_name,
      
-    IF(b.customer_code IS NULL OR diff_days > 31, '断约客户', NULL) AS typeder
+    IF(d.customer_code IS not  NULL and b.max_sdt is not null , '断约客户', NULL) AS typeder
 from tmp_customer_level a 
 left join tmp_sale_detail b on a.customer_no=b.customer_code
+left join tmp_terminate_info d on a.customer_no=d.customer_code
 join
 		(
 		select distinct 
@@ -756,6 +775,8 @@ join
       		bbc_leader_city_name
 			;
 
+-- A类客户按照等级销售经理A类客户 
+-- A类客户明细
 
 -- A类客户按照等级销售经理A类客户 
 -- A类客户明细
@@ -797,7 +818,21 @@ tmp_sale_detail as   (
       AND order_channel_code <> 4
     GROUP BY customer_code
 )
- 
+,
+tmp_terminate_info as 
+(select customer_code,terminate_date,
+row_number()over(partition by customer_code order by terminate_date desc ) as rn from 
+(select customer_code,terminate_date from csx_dim.csx_dim_crm_terminate_customer  
+    where sdt='current' 
+        and business_attribute_code=1
+        and status=2
+ union all 
+ select customer_code,terminate_date from csx_dim.csx_dim_crm_terminate_customer_attribute  
+    where sdt='current'  
+        and business_attribute_code=1
+        and approval_status=2
+) a 
+)
 select  
 	 a.*,
     coalesce(c.rp_service_user_work_no_new,'') as rp_service_user_work_no_new,
@@ -818,10 +853,12 @@ select
 	coalesce(c.bbc_leader_name,'') as bbc_leader_name,
 	coalesce(c.bbc_leader_city_user_number,'') as bbc_leader_city_user_number,
     coalesce(c.bbc_leader_city_name,'') as bbc_leader_city_name,
-     
-    IF(b.customer_code IS NULL OR diff_days > 31, '断约客户', NULL) AS typeder
+    b.max_sdt,
+    d.terminate_date,
+    IF(d.customer_code IS not  NULL and b.max_sdt is not null , '断约客户', NULL) AS typeder
 from tmp_customer_level a 
 left join tmp_sale_detail b on a.customer_no=b.customer_code
+left join tmp_terminate_info d on a.customer_no=d.customer_code
 join
 		(
 		select distinct 
@@ -848,3 +885,5 @@ join
 		where
 			sdt in ('20250930')
 		) c on a.customer_no=c.customer_no
+  
+

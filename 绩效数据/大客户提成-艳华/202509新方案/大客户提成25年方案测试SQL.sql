@@ -1,5 +1,6 @@
 -- 判断新客，新客系数 active_new_flag=1 与跨业务 cross_business_flag=1
 -- 新客履约含餐卡
+-- drop table csx_analyse_tmp.csx_analyse_tmp_tc_new_customer_info ;
 create table csx_analyse_tmp.csx_analyse_tmp_tc_new_customer_info as 
 with tmp_business_info as (
   select
@@ -40,7 +41,7 @@ with tmp_business_info as (
       WHERE
         sdt = 'current'
         and business_stage = 5
-        and business_sign_time < '2025-09-01 00:00:00' --
+        and business_sign_time < '2025-10-01 00:00:00' --
         and business_type_code in (1, 2, 6, 10)
         and shipper_code = 'YHCSX'
     
@@ -56,18 +57,18 @@ tmp_cust_active as
   first_business_sale_date ,
   last_business_sale_date ,
   substr(last_business_sale_date,1,6) as sale_month,
-  case when first_business_sale_date >=  regexp_replace(trunc(last_day(add_months('2025-09-23',-1)),'MM'),'-','') 
-        and first_business_sale_date <   regexp_replace(date_add(trunc(last_day(add_months('2025-09-23',-1)),'MM'),19),'-','') 
+  case when first_business_sale_date >=  regexp_replace(trunc(last_day(add_months('${sdt_yes_date}',-1)),'MM'),'-','') 
+        and first_business_sale_date <   regexp_replace(date_add(trunc(last_day(add_months('${sdt_yes_date}',-1)),'MM'),19),'-','') 
         and business_type_code in (1,6) then '1' 
-    when  first_business_sale_date >=  regexp_replace(trunc(last_day(add_months('2025-09-23',-1)),'MM'),'-','') 
-        and first_business_sale_date <=    regexp_replace(last_day(add_months('2025-09-23',-1)),'-','') 
+    when  first_business_sale_date >=  regexp_replace(trunc(last_day(add_months('${sdt_yes_date}',-1)),'MM'),'-','') 
+        and first_business_sale_date <=    regexp_replace(last_day(add_months('${sdt_yes_date}',-1)),'-','') 
         and business_type_code in (2,10) 
         then '1'
     else '0' end active_new_flag,
     '1' new_cust_flag
  from csx_dws.csx_dws_crm_customer_business_active_di a
-where sdt=regexp_replace(last_day(add_months('2025-09-23',-1)),'-','')
-    and  first_business_sale_date >=  regexp_replace(date_add(trunc(last_day(add_months('2025-09-23',-1)),'MM'),0),'-','') 
+where sdt=regexp_replace(last_day(add_months('${sdt_yes_date}',-1)),'-','')
+    and  first_business_sale_date >=  regexp_replace(date_add(trunc(last_day(add_months('${sdt_yes_date}',-1)),'MM'),0),'-','') 
 ),
 tmp_sale_detail as (
   select
@@ -86,8 +87,8 @@ tmp_sale_detail as (
   from
     csx_dws.csx_dws_sale_detail_di
   where
-    sdt >= '20250801'
-    and sdt <= '20250831'
+    sdt >=    regexp_replace(trunc(last_day(add_months('${sdt_yes_date}',-1)),'MM'),'-','') 
+    and sdt <= regexp_replace(last_day(add_months('${sdt_yes_date}',-1)),'-','')
     and business_type_code in ('1','2','10' ,'6')
   group by
     performance_province_name,
@@ -129,11 +130,11 @@ tmp_sales_leader_info as (
       from
         csx_dim.csx_dim_uc_user a
       where
-        sdt = '20250922'
+        sdt = regexp_replace(last_day(add_months('${sdt_yes_date}',-1)),'-','')
         and status = 0
     ) b on a.leader_user_id = b.user_id
   where
-    sdt = '20250922'
+    sdt = regexp_replace(last_day(add_months('${sdt_yes_date}',-1)),'-','')
     and status = 0
     )a 
     left join tmp_position_dic b on a.source_user_position=b.code
@@ -196,6 +197,7 @@ CASE
 									'石家庄市', '江苏苏州', '杭州市','郑州市','广东广州') THEN 'A/B'
     WHEN a.performance_city_name IN ('厦门市', '宁波市', '泉州市', '莆田市', '南平市', '南昌市', '贵阳市', '宜宾', '武汉市') THEN 'C'
     WHEN a.performance_city_name IN ('三明市','阜阳市','台州市','龙岩市','万州区','江苏盐城','黔江区','永川区') then 'D'
+    else 'D'
   END AS city_type_name
   from csx_dim.csx_dim_shop  a 
   where sdt='current'
@@ -236,6 +238,7 @@ from
   left join tmp_city_plan d on a.performance_city_name=d.performance_city_name
   where b.customer_code is not null 
  
+  
   ;
 
 -- E:\彩食鲜工作内容\输出文件\绩效数据\大客户提成-艳华\202509新方案\csx_analyse_fr_tc_customer_credit_order_detail 回款提成系数计算.sql
@@ -436,14 +439,7 @@ select
 	a.account_period_value,	-- 账期值
 	a.source_sys,	-- 来源系统 MALL B端销售 BBC BBC端 BEGIN期初
 	a.reconciliation_period,  -- 对账周期
-	-- a.bill_date, -- 结算日期
-	
-	-- 调整结算日 暂时在代码中调整
-	-- 126275 将销售日期为6.15-8.15期间的BBC，结算日调整为8.16，且最高回款系数100%
-	case when a.customer_code='126275' and a.business_type_name like 'BBC%' 
-	and a.happen_date >='2023-06-15' and a.happen_date <='2023-08-15' then '2023-08-16'
-	else a.bill_date end as bill_date, -- 结算日期
-	
+	a.bill_date, -- 结算日期
 	a.overdue_date,	-- 逾期开始日期	
 	-- a.paid_date,	-- 核销日期	
 	case when (regexp_replace(substr(a.happen_date,1,10),'-','') between f.date_star and f.date_end) and f.category_second is not null 
@@ -670,7 +666,7 @@ left join
 	
 
 -- 客户+结算月+回款时间系数：各业务类型毛利率提成比例
-drop table if exists csx_analyse_tmp.tmp_tc_business_billmonth_profit_rate_tc_test;
+-- drop table if exists csx_analyse_tmp.tmp_tc_business_billmonth_profit_rate_tc_test;
 create  table csx_analyse_tmp.tmp_tc_business_billmonth_profit_rate_tc_test
 as
 select a.*,
@@ -784,8 +780,8 @@ from
 		bbc_service_user_name,
 		-- 提成分配系数
 		rp_sales_fp_rate,
-		fl_sales_sale_fp_rate as fl_sales_fp_rate,
-		bbc_sales_sale_fp_rate as bbc_sales_fp_rate,
+		fl_sales_fp_rate,
+		bbc_sales_fp_rate,
 		rp_service_user_fp_rate,
 		fl_service_user_fp_rate,
 		bbc_service_user_fp_rate,	
@@ -849,8 +845,8 @@ from
 		bbc_service_user_name,
 		-- 提成分配系数
 		rp_sales_fp_rate,
-		fl_sales_sale_fp_rate,
-		bbc_sales_sale_fp_rate,
+		fl_sales_fp_rate,
+		bbc_sales_fp_rate,
 		rp_service_user_fp_rate,
 		fl_service_user_fp_rate,
 		bbc_service_user_fp_rate,
@@ -860,8 +856,7 @@ from
 		yufu_flag,
 		-- if(paid_date<happen_date,'是','否'),
 		substr(regexp_replace(happen_date,'-',''),1,6),  -- 销售月
-		case when a.customer_code='126275' and dff_rate_new>1 then 1
-			else dff_rate_new end   -- 回款时间系数
+		dff_rate_new    -- 回款时间系数
 )a	
 left join csx_analyse.csx_analyse_fr_tc_customer_sale_fwf_business b on a.customer_code=b.customer_code and a.happen_month=b.smonth
 left join csx_analyse.csx_analyse_fr_tc_customer_sale_fwf_business c on a.customer_code=c.customer_code and c.smonth=substr(regexp_replace(last_day(add_months('${sdt_yes_date}',-1)),'-',''),1,6)
@@ -1391,6 +1386,7 @@ left join
 
 
 
+select * from csx_analyse_tmp.csx_analyse_fr_tc_customer_bill_month_dff_rate_detail where customer_code='166197'
 
 -- drop table if exists csx_analyse_tmp.csx_analyse_fr_tc_customer_bill_month_dff_rate_detail;
 create  table csx_analyse_tmp.csx_analyse_fr_tc_customer_bill_month_dff_rate_detail as
@@ -1424,11 +1420,11 @@ tmp_sales_leader_info as (
       from
         csx_dim.csx_dim_uc_user a
       where
-        sdt = '20250922'
+        sdt = '20250930'
         and status = 0
     ) b on a.leader_user_id = b.user_id
   where
-    sdt = '20250922'
+    sdt = '20250930'
     and status = 0
     )a 
     left join tmp_position_dic b on a.source_user_position=b.code
@@ -1444,12 +1440,7 @@ select
 	a.province_name,
 	a.city_group_code,
 	a.city_group_name,
-	CASE 
-    WHEN a.city_group_name IN ('北京市', '福州市', '重庆主城', '深圳市', '成都市', '上海松江', '南京主城', '合肥市', '西安市', 
-									'石家庄市', '江苏苏州', '杭州市','郑州市','广东广州') THEN 'A/B'
-    WHEN a.city_group_name IN ('厦门市', '宁波市', '泉州市', '莆田市', '南平市', '南昌市', '贵阳市', '宜宾', '武汉市') THEN 'C'
-    WHEN a.city_group_name IN ('三明市','阜阳市','台州市','龙岩市','万州区','江苏盐城','黔江区','永川区') then 'D'
-    END AS city_type_name,
+	e.city_type_name,
 	a.customer_code,	-- 客户编码
 	a.customer_name,
 	a.sales_id,
@@ -1528,8 +1519,8 @@ select
 	a.bbc_service_profit_finish,
 	a.bbc_service_target_rate,
 	a.bbc_service_target_rate_tc,
-	
-	sum(tc_sales) * coalesce(sales_coefficient,1)*coalesce(cross_coefficient,1) as tc_sales,
+	-- CD类城市，1、福利销售BD开发日配客户，按照50%， 2、非福利销售BD，开发福利业务也是按照100%
+	sum(tc_sales) * coalesce(sales_coefficient,1)* coalesce(c.cross_coefficient,1)  as tc_sales,
 	sum(tc_rp_service) as tc_rp_service,		
 	sum(tc_fl_service) as tc_fl_service,	
 	sum(tc_bbc_service) as tc_bbc_service,
@@ -1564,15 +1555,14 @@ select
 	a.by_fl_profit,	
 
 	-- 增加字段，计算不考虑毛利目标达成情况的提成
-	sum(original_tc_sales)* coalesce(sales_coefficient,1)*coalesce(cross_coefficient,1) as original_tc_sales,
+	sum(original_tc_sales)* coalesce(sales_coefficient,1)*coalesce(c.cross_coefficient,1) as original_tc_sales,
 	sum(original_tc_rp_service) as original_tc_rp_service,		
 	sum(original_tc_fl_service) as original_tc_fl_service,	
 	sum(original_tc_bbc_service) as original_tc_bbc_service,	
 	sales_coefficient,              -- 新客系数
-	cross_coefficient,              -- 销售员跨业务开客提成50%
-	substr(regexp_replace(last_day(add_months('${sdt_yes_date}',-1)),'-',''),1,6) as smt -- 统计日期 	
-	
-from csx_analyse_tmp.csx_analyse_fr_tc_customer_bill_month_dff_rate_detail_1 a
+	c.cross_coefficient cross_coefficient,              -- 销售员跨业务开客提成50%
+	substr(regexp_replace(last_day(add_months('${sdt_yes_date}',-1)),'-',''),1,6) as smt -- 统计日期 
+from csx_analyse_tmp.csx_analyse_fr_tc_customer_bill_month_dff_rate_detail_1_test a
 left join 
 (select customer_code,
     user_position_name,
@@ -1598,16 +1588,22 @@ group by customer_code,
     user_position_name
     ) b on a.customer_code=b.customer_code 
 left join 
- (select customer_code,
-    user_position_name,
-    if(cross_business_flag=1,0.5,1) as cross_coefficient
+ (select a.customer_code,
+    a.user_position_name,
+    case when e.city_type_name in ('C','D') and business_type_name in ('BBC','福利业务','福利小店') and a.user_position_name  in ('销售岗','销售员（旧）','销售员','销售经理','高级销售经理')  then 1 
+        else 0.5 end  as cross_coefficient
 from csx_analyse_tmp.csx_analyse_tmp_tc_new_customer_info a 
+left join 
+csx_analyse_tmp.csx_analyse_customer_sale_service_info_rate_qc_mi e on a.customer_code=e.customer_no
 where cross_business_flag=1
 group by customer_code,
-    user_position_name,
-    cross_business_flag
+    a.user_position_name,
+    cross_business_flag,
+    case when e.city_type_name in ('C','D') and business_type_name in ('BBC','福利业务','福利小店') and a.user_position_name  in ('销售岗','销售员（旧）','销售员','销售经理','高级销售经理')  then 1 
+        else 0.5 end
     ) c on a.customer_code=c.customer_code
 left join  tmp_sales_leader_info d on a.work_no=d.user_number   
+left join  csx_analyse_tmp.csx_analyse_customer_sale_service_info_rate_qc_mi e on a.customer_code=e.customer_no
 group by 
 	concat_ws('-',substr(regexp_replace(last_day(add_months('${sdt_yes_date}',-1)),'-',''),1,6),a.province_code,a.customer_code,
 	a.bill_month,a.happen_month,a.bill_date,a.paid_date,cast(a.dff_rate as string)),
@@ -1704,11 +1700,132 @@ group by
 	a.by_fl_profit,
 	sales_coefficient,              -- 新客系数
 	cross_coefficient ,            -- 销售员跨业务开客提成50%;	
-	CASE 
-    WHEN a.city_group_name IN ('北京市', '福州市', '重庆主城', '深圳市', '成都市', '上海松江', '南京主城', '合肥市', '西安市', 
-									'石家庄市', '江苏苏州', '杭州市','郑州市','广东广州') THEN 'A/B'
-    WHEN a.city_group_name IN ('厦门市', '宁波市', '泉州市', '莆田市', '南平市', '南昌市', '贵阳市', '宜宾', '武汉市') THEN 'C'
-    WHEN a.city_group_name IN ('三明市','阜阳市','台州市','龙岩市','万州区','江苏盐城','黔江区','永川区') then 'D'
-    END
-	
+	city_type_name
+-- 	CASE 
+--     WHEN a.city_group_name IN ('北京市', '福州市', '重庆主城', '深圳市', '成都市', '上海松江', '南京主城', '合肥市', '西安市', 
+-- 									'石家庄市', '江苏苏州', '杭州市','郑州市','广东广州') THEN 'A/B'
+--     WHEN a.city_group_name IN ('厦门市', '宁波市', '泉州市', '莆田市', '南平市', '南昌市', '贵阳市', '宜宾', '武汉市') THEN 'C'
+--     WHEN a.city_group_name IN ('三明市','阜阳市','台州市','龙岩市','万州区','江苏盐城','黔江区','永川区') then 'D'
+--     END
+	;
 
+
+-- 跨业务开客提成50%
+select
+  a.performance_province_name,
+  a.performance_city_name,
+  a.business_type_name,
+  a.other_needs_code,
+  a.sales_user_number,
+  a.sales_user_name,
+  a.user_position_name,
+  a.customer_code,
+  a.customer_name,
+  a.first_business_sign_date,
+  a.first_business_sale_date,
+   case when e.city_type_name in ('C','D') and business_type_name in ('BBC','福利业务','福利小店') and a.user_position_name  in ('销售岗','销售员（旧）','销售员','销售经理','高级销售经理')  then 1 
+        else 0.5 end  as cross_coefficient,
+        smt
+from csx_analyse_tmp.csx_analyse_tmp_tc_new_customer_info a 
+left join 
+csx_analyse_tmp.csx_analyse_customer_sale_service_info_rate_qc_mi e on a.customer_code=e.customer_no
+where cross_business_flag=1
+-- and a.customer_code='166197'
+ group by a.performance_province_name,
+  a.performance_city_name,
+  a.business_type_name,
+  a.other_needs_code,
+  a.sales_user_number,
+  a.sales_user_name,
+  a.user_position_name,
+  a.customer_code,
+  a.customer_name,
+  a.first_business_sign_date,
+  a.first_business_sale_date,
+   case when e.city_type_name in ('C','D') and business_type_name in ('BBC','福利业务','福利小店') and a.user_position_name  in ('销售岗','销售员（旧）','销售员','销售经理','高级销售经理')  then 1 
+        else 0.5 end,
+        smt
+		;
+
+-- 个人开发系数
+select a.performance_province_name,
+  a.performance_city_name,
+    a.other_needs_code,
+  a.business_type_name,
+  customer_code,
+  a.customer_name,
+  a.first_business_sign_date,
+  a.first_business_sale_date,
+    sales_user_number,
+    sales_user_name,
+    user_position_name,
+    sale_amt,
+    sales_person_target,	
+    city_category_score,
+    total_sale_amt,
+    case   when   user_position_name in ('销售岗','销售员（旧）','销售员') 
+                then  
+                    case when (a.total_sale_amt)/10000/(sales_person_target) between 1 and 1.4999 then 1.1
+                    when  (a.total_sale_amt)/10000/(sales_person_target)>=1.5 then 1.2
+                    else 1 
+                    end
+             when   user_position_name like '%销售经理%'  then 
+                case when (a.total_sale_amt)/10000/(city_category_score) between 1 and 1.4999 then 1.1
+                     when (a.total_sale_amt)/10000/(city_category_score)>=1.5 then 1.2
+                else 1 end 
+        else 1 
+        end as sales_coefficient
+from 
+(select a.performance_province_name,
+  a.performance_city_name,
+    a.other_needs_code,
+  a.business_type_name,
+  customer_code,
+  a.customer_name,
+  a.first_business_sign_date,
+  a.first_business_sale_date,
+    sales_user_number,
+    sales_user_name,
+    user_position_name,
+    (a.sale_amt) sale_amt,
+    (sales_target) sales_person_target,	
+    (city_manager_target )city_category_score,
+    sum(sale_amt)over(partition by sales_user_number,user_position_name ) as total_sale_amt
+  
+from    csx_analyse.csx_analyse_tc_development_customer_info  a 
+where  smt=substr(regexp_replace(last_day(add_months('2025-10-09',-1)),'-',''),1,6)
+and (business_type_name='日配业务' or other_needs_code='餐卡') and active_new_flag=1
+and ( user_position_name in ('销售岗','销售员（旧）','销售员')  or user_position_name like '%销售经理%')
+)a 
+     
+	; 
+
+--管家系数
+select
+  channel_name,
+  region_name,
+  province_name,
+  city_group_name,
+  customer_no,
+  customer_name,
+  work_no,
+  sales_name,
+  user_position_name,
+  rp_service_user_work_no,
+  rp_service_user_name,
+  fl_service_user_work_no,
+  fl_service_user_name,
+  bbc_service_user_work_no,
+  bbc_service_user_name,
+  rp_sales_fp_rate,
+  fl_sales_fp_rate,
+  bbc_sales_fp_rate,
+  rp_service_user_fp_rate,
+  fl_service_user_fp_rate,
+  bbc_service_user_fp_rate,
+  update_time,
+  customer_profit_rate,
+  city_profit_rate,
+  smt
+from
+  csx_analyse_tmp.csx_analyse_customer_sale_service_info_rate_qc_mi

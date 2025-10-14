@@ -883,6 +883,7 @@ SELECT
        c.supervisor_user_name first_supervisor_name, 
 	     a.customer_code customer_no,
 	     c.customer_name,
+       max_sdt,
        if(b.customer_code is null or  diff_days>31,'断约客户',null) typeder  
 from  tmp_xiaoshou_ratio01 a
 left join 
@@ -1203,7 +1204,7 @@ left join
      from   csx_dws.csx_dws_sale_detail_di
      where  sdt>='20250701' and sdt<='20250930'
                 and business_type_code in (1,2,6,10) 
-                and partner_type_code not in (1,3) -- 1.自营 2.经销商
+                and partner_type_code not in (1,3) -- 0-非合伙人  1-城市服务商 2-联营合伙人  3-城市服务商2.0
      group by substr(sdt,1,6),
 			 customer_code,
              business_type_code
@@ -1284,12 +1285,13 @@ left join
      from   csx_dws.csx_dws_sale_detail_di
      where  sdt>='20250701' and sdt<='20250930'
                 and business_type_code in (1,2,6,10)  
-                and partner_type_code not in (1,3) -- 1.自营 2.经销商
+                and partner_type_code not in (1,3) -- 0-非合伙人  1-城市服务商 2-联营合伙人  3-城市服务商2.0
      group by substr(sdt,1,6),
 			 customer_code,
              business_type_code
              )b on a.customer_no=b.customer_code and a.business_type_code=b.business_type_code 
-			   and a.smonth=b.smonth ;
+			   and a.smonth=b.smonth 
+      where sale_amt is not null ;
 
 			
 

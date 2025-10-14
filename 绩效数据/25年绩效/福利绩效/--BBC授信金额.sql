@@ -24,7 +24,7 @@ from
     from
       csx_analyse.csx_analyse_fr_bbc_wshop_user_credit_di
     where
-      sdt = '20250531'
+      sdt in( '20250731','20250831', '20250930' )
       and (
         credit_balance is not null
         or count_person is not null

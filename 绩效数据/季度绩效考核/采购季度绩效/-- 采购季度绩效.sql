@@ -64,23 +64,32 @@ tmp_fl as
   m.first_level_name firstLevelName,
   m.second_level_code secondLevelCode,
   m.second_level_name secondLevelName,
-  sum(cast(m.total_amount as decimal(26,4))) billTotalAmount 
+  -- 分摊支出负数
+  sum(
+            CASE
+                WHEN a.is_share_fee = '1' AND a.income_type = '1' 
+                THEN -CAST(m.total_amount AS DECIMAL(26, 4))
+                ELSE CAST(m.total_amount AS DECIMAL(26, 4))
+            END
+        ) billTotalAmount 
 FROM
     csx_dwd.csx_dwd_pss_settle_settle_bill_detail_management_classification_item_di m
-  LEFT JOIN (
+  inner JOIN (
     select
-        belong_date,
-        settle_code,
+      belong_date,
+      settle_code,
       settlement_dc_code,
       shop_name as settlement_dc_name,
       c.basic_performance_region_name,
 	  c.basic_performance_province_code,
 	  c.basic_performance_province_name,
 	  c.basic_performance_city_code,
-	  c.basic_performance_city_name
+	  c.basic_performance_city_name,
+	  a.is_share_fee,
+	  a.income_type 
     from
       csx_dwd.csx_dwd_pss_settle_settle_bill_di a 
-    left join 
+   inner join 
 	(select basic_performance_region_name,
 	    basic_performance_province_code,
 	    basic_performance_province_name,
@@ -91,25 +100,18 @@ FROM
 	  from csx_dim.csx_dim_shop
 	    where sdt='current' 
 	 ) c on a.settlement_dc_code=c.shop_code
-    where
-    --   sdt >= '20250101'
-    1=1 
-  ) a ON a.settle_code = m.settle_no
-where
-  1=1
-  and 
-  (settlement_dc_name not like '%项目供应商%'
+   where (settlement_dc_name not like '%项目供应商%'
   and settlement_dc_name not like '%福利%'
   and settlement_dc_name not like '%BBC%'
   and settlement_dc_name not like '%全国%'
   and settlement_dc_name not like '%合伙人%'
   and settlement_dc_name not like '%服务商%'
   and settlement_dc_name not like '%前置仓%'
- -- and settlement_dc_name not like '%直送%'
+  -- and settlement_dc_name not like '%分仓%'
   )
---   and a.settle_date BETWEEN '2025-01-01' AND '2025-02-28'
---   and settle_no='FY25020800766'
-  and to_date(belong_date) >= '${sdate}'
+  ) a ON a.settle_code = m.settle_no
+ where 
+   to_date(belong_date) >= '${sdate}'
   and to_date(belong_date) <= '${edate}'
  group by substr(regexp_replace(to_date(belong_date),'-',''),1,6) ,
   a.basic_performance_region_name,
@@ -120,7 +122,7 @@ where
   m.first_level_code ,
   m.first_level_name ,
   m.second_level_code ,
-  m.second_level_name 
+  m.second_level_name  
 )
 select sales_months,
     basic_performance_region_name,
@@ -234,23 +236,32 @@ with tmp_fl as
   m.first_level_name firstLevelName,
   m.second_level_code secondLevelCode,
   m.second_level_name secondLevelName,
-  sum(cast(m.total_amount as decimal(26,4))) billTotalAmount 
+  -- 分摊支出负数
+  sum(
+            CASE
+                WHEN a.is_share_fee = '1' AND a.income_type = '1' 
+                THEN -CAST(m.total_amount AS DECIMAL(26, 4))
+                ELSE CAST(m.total_amount AS DECIMAL(26, 4))
+            END
+        ) billTotalAmount 
 FROM
     csx_dwd.csx_dwd_pss_settle_settle_bill_detail_management_classification_item_di m
-  LEFT JOIN (
+  inner JOIN (
     select
-        belong_date,
-        settle_code,
+      belong_date,
+      settle_code,
       settlement_dc_code,
       shop_name as settlement_dc_name,
       c.basic_performance_region_name,
 	  c.basic_performance_province_code,
 	  c.basic_performance_province_name,
 	  c.basic_performance_city_code,
-	  c.basic_performance_city_name
+	  c.basic_performance_city_name,
+	  a.is_share_fee,
+	  a.income_type 
     from
       csx_dwd.csx_dwd_pss_settle_settle_bill_di a 
-    left join 
+   inner join 
 	(select basic_performance_region_name,
 	    basic_performance_province_code,
 	    basic_performance_province_name,
@@ -261,26 +272,19 @@ FROM
 	  from csx_dim.csx_dim_shop
 	    where sdt='current' 
 	 ) c on a.settlement_dc_code=c.shop_code
-    where
-    --   sdt >= '20250101'
-    1=1 
-  ) a ON a.settle_code = m.settle_no
-where
-  1=1
-  and 
-  (settlement_dc_name not like '%项目供应商%'
+   where (settlement_dc_name not like '%项目供应商%'
   and settlement_dc_name not like '%福利%'
   and settlement_dc_name not like '%BBC%'
   and settlement_dc_name not like '%全国%'
   and settlement_dc_name not like '%合伙人%'
   and settlement_dc_name not like '%服务商%'
   and settlement_dc_name not like '%前置仓%'
- -- and settlement_dc_name not like '%直送%'
+  -- and settlement_dc_name not like '%分仓%'
   )
---   and a.settle_date BETWEEN '2025-01-01' AND '2025-02-28'
---   and settle_no='FY25020800766'
-  and to_date(belong_date) >= '2025-07-01'
-  and to_date(belong_date) <= '2025-09-30'
+  ) a ON a.settle_code = m.settle_no
+ where 
+   to_date(belong_date) >= '${sdate}'
+  and to_date(belong_date) <= '${edate}'
  group by substr(regexp_replace(to_date(belong_date),'-',''),1,6) ,
   a.basic_performance_region_name,
   a.basic_performance_province_code,
@@ -290,7 +294,7 @@ where
   m.first_level_code ,
   m.first_level_name ,
   m.second_level_code ,
-  m.second_level_name 
+  m.second_level_name  
 )
 select * from tmp_fl
 ;

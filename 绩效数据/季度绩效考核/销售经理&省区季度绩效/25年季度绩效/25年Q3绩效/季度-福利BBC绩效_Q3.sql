@@ -29,8 +29,13 @@ from   (
 				sum(sale_amt_no_tax) excluding_tax_sales
            from   csx_dws.csx_dws_sale_detail_di
            where sdt >='20250701'  and sdt <= '20250930'
-			 and (business_type_code in ('2','6','10') or inventory_dc_code in ('WD75','WD76','WD77','WD78','WD79','WD80','WD81')) 
-		   group by customer_code,performance_province_name,performance_city_name,substr(sdt,1,6),business_type_name
+			 and (business_type_code in ('2','6','10') 
+          or inventory_dc_code in ('WD75','WD76','WD77','WD78','WD79','WD80','WD81')) 
+		   group by customer_code,
+       performance_province_name,
+       performance_city_name,
+       substr(sdt,1,6),
+       business_type_name
 		)a			
 LEFT join
           (
@@ -84,8 +89,8 @@ select
     sum(excluding_tax_sales) excluding_tax_sales,
     sum(excluding_tax_profit) excluding_tax_profit
 from   (
-          select 
-                customer_code,
+      select 
+        customer_code,
 				performance_province_name province_name,
 				performance_city_name city_group_name,
 				substr(sdt,1,6) smonth,
@@ -97,7 +102,8 @@ from   (
            from   csx_dws.csx_dws_sale_detail_di
            where sdt >='20250701'  and sdt <= '20250930'
 		   -- and customer_code not in ('120459','121206')
-			 and (business_type_code in ('2','6','10') or inventory_dc_code in ('WD75','WD76','WD77','WD78','WD79','WD80','WD81')) 
+			 and (business_type_code in ('2','6','10') 
+        or inventory_dc_code in ('WD75','WD76','WD77','WD78','WD79','WD80','WD81')) 
         --     and channel_code in ('1','7','9') 
 		   group by customer_code,performance_province_name,performance_city_name,substr(sdt,1,6),business_type_name
 		)a			
@@ -119,12 +125,12 @@ group by
       c.sales_manager_user_name , 
       c.supervisor_user_number ,
       c.supervisor_user_name,
-	  c.sales_user_number,
-	  c.sales_user_name,
+	    c.sales_user_number,
+	    c.sales_user_name,
       a.customer_code,
       c.customer_name,
       a.business_type_name,
-	  a.smonth  ;
+	    a.smonth  ;
 
 		   
 -- 应收周转

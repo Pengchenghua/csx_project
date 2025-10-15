@@ -8,6 +8,6 @@
 !*.sql
 !*.txt
 !*.py
-
+!*.js
 # 但排除特定的隐藏文件和目录
 !.gitignore

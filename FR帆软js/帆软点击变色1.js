@@ -1,64 +1,141 @@
-	// 监听控件状态变化
-	var boxes = _g().getWidgetsByName("复选按钮控件名称");
-	boxes.forEach(function(box) {
-	    box.on("statechange", function() { //{{JS实现单选按钮选项不同颜色-4796.md}}
-	        var location = this.options.location; // 获取控件所在单元格位置
-	        var row = FR.cellStr2ColumnRow(location).row; // 转为行号
-	        var isChecked = this.getValue(); // 获取勾选状态（true/false或1/0）
-	        
-	        // 根据状态设置行背景色
-	        _g().setCellStyle(0, "A", row, "background:" + (isChecked ? "#90EE90" : ""));
-	    });
-	});
+// 复选框状态改变事件 - 优先级高
+// 检查当前是否为sheet2
+// 输出当前工作表名称用于调试
+//console.log('当前工作表名称:', _g().currentSheetName);
+//var currentSheetName = _g().currentSheetName;
+//if (currentSheetName !== 'sheet2') {
+//    // 如果不是sheet2，则不执行后续代码
+//    return;
+//}
 
--- 点击变色
-    // 针对帆软报表10.0优化的行点击变色功能，特别处理分组单元格
+var checked = this.getValue();
+var location = this.options.location;
+var rowIndex = FR.cellStr2ColumnRow(location).row;
+
+var $rowElement = $('tr[tridx="' + rowIndex + '"]');
+
+if ($rowElement.length > 0) {
+    if (checked) {
+        // 复选框选中 - 设置复选框选中标记和颜色
+        $rowElement.attr('data-checkbox-selected', 'true');
+        $rowElement.attr('data-click-selected', 'false'); // 清除点击选中状态
+        $rowElement.css('background-color', '#e8f5e9');
+        $rowElement.find('td').css('background-color', '#e8f5e9');
+    } else {
+        // 复选框取消选中 - 清除复选框选中标记和颜色
+        $rowElement.attr('data-checkbox-selected', 'false');
+        $rowElement.css('background-color', '');
+        $rowElement.find('td').css('background-color', '');
+        
+        // 如果之前有点击选中，恢复点击选中颜色
+        var isClickSelected = $rowElement.attr('data-click-selected') === 'true';
+        if (isClickSelected) {
+            $rowElement.css('background-color', '#e8f5e9');
+            $rowElement.find('td').css('background-color', '#e8f5e9');
+        }
+    }
+}
+;
+
+
+// 行点击变色，再次点击恢复原色，只影响当前行
 $(document).ready(function() {
-    // 使用事件委托，处理动态加载的内容
-    $(".x-table").on('click', 'tr', function() {
-        var rowNum = $(this).index() + 1;
-        if (rowNum < 2) return; // 过滤前3行（表头）
-        
+    $(".x-table").on('click', 'tr', function (event) {
+        var $row = $(this);
+        // 新增S列判断（假设S列是第19列，索引18）
+        var sValue = $row.find("td:eq(18)").text().trim();
+        if(sValue !== "1") return; // 如果S列值为"1"，则不执行点击变色
         var $clickedRow = $(this);
-        var $tds = $clickedRow.find('td');
-        
-        // 检查当前行是否已经被高亮（检查第一个有背景色的td）
-        var isHighlighted = false;
-        $tds.each(function() {
-            var bgColor = $(this).css('background-color');
-            if (bgColor === 'rgb(230, 250, 246)' || bgColor === '#e6faf6' || 
-                (bgColor && bgColor.indexOf('230') >= 0 && bgColor.indexOf('250') >= 0)) {
-                isHighlighted = true;
-                return false; // 跳出循环
-            }
-        });
-        
-        if (isHighlighted) {
-            // 取消高亮
+        var $target = $(event.target);
+        var checkboxColumnIndex = 20; // U列的索引（从0开始）
+        var clickedCellIndex = $target.closest('td').index();
+
+        // 排除复选框列和控件
+        if (clickedCellIndex === checkboxColumnIndex) return;
+        if ($target.is('input[type="checkbox"]') || $target.closest('input[type="checkbox"]').length > 0) return;
+
+        // 跳过表头
+        if ($clickedRow.closest('thead').length > 0) return;
+
+        // 跳过复选框已选中行
+        if ($clickedRow.attr('data-checkbox-selected') === 'true') return;
+
+        var isClickHighlighted = $clickedRow.attr('data-click-selected') === 'true';
+        if (isClickHighlighted) {
+            $clickedRow.attr('data-click-selected', 'false');
             $clickedRow.css('background-color', '');
-            $tds.each(function() {
-                $(this).css('background-color', '');
-                // 处理分组单元格中的子元素
-                $(this).find('*').each(function() {
-                    var elemBg = $(this).css('background-color');
-                    if (elemBg === 'rgb(230, 250, 246)' || elemBg === '#e6faf6' || 
-                        (elemBg && elemBg.indexOf('230') >= 0 && elemBg.indexOf('250') >= 0)) {
-                        $(this).css('background-color', '');
-                    }
-                });
-            });
         } else {
-            // 添加高亮
-            $clickedRow.css('background-color', '#e6faf6');
-            $tds.each(function() {
-                $(this).css('background-color', '#e6faf6');
-                // 特别处理分组单元格
-                if ($(this).hasClass('x-group-cell') || $(this).find('.x-group-content').length > 0) {
-                    $(this).find('*').each(function() {
-                        $(this).css('background-color', '#e6faf6');
-                    });
-                }
-            });
+            $clickedRow.attr('data-click-selected', 'true');
+            $clickedRow.css('background-color', '#EAF6F6');
         }
     });
 });
+
+
+
+	// 获取S4单元格值
+	var checkValue = _g().getCellValue("S4");  
+	// 获取目标控件（假设控件位于A5单元格）
+	var widget = _g().getWidgetByCell("U4");  
+	 
+	// 判断并设置控件状态
+	if(checkValue == 1) {
+	    widget.setEnable(false);  // 不可用
+	} else {
+	    widget.setEnable(true);   // 恢复可用
+	}
+;
+    
+
+
+// 复选框状态改变事件 - 优先级高
+// 检查当前是否为sheet2
+// 输出当前工作表名称用于调试
+//console.log('当前工作表名称:', _g().currentSheetName);
+//var currentSheetName = _g().currentSheetName;
+//if (currentSheetName !== 'sheet2') {
+//    // 如果不是sheet2，则不执行后续代码
+//    return;
+//}
+
+var checked = this.getValue();
+var location = this.options.location;
+var rowIndex = FR.cellStr2ColumnRow(location).row;
+
+var $rowElement = $('tr[tridx="' + rowIndex + '"]');
+
+if ($rowElement.length > 0) {
+    if (checked) {
+        // 复选框选中 - 设置复选框选中标记和颜色
+        $rowElement.attr('data-checkbox-selected', 'true');
+        $rowElement.attr('data-click-selected', 'false'); // 清除点击选中状态
+        $rowElement.css('background-color', '#e8f5e9');
+        $rowElement.find('td').css('background-color', '#e8f5e9');
+    } else {
+        // 复选框取消选中 - 清除复选框选中标记和颜色
+        $rowElement.attr('data-checkbox-selected', 'false');
+        $rowElement.css('background-color', '');
+        $rowElement.find('td').css('background-color', '');
+        
+        // 如果之前有点击选中，恢复点击选中颜色
+        var isClickSelected = $rowElement.attr('data-click-selected') === 'true';
+        if (isClickSelected) {
+            $rowElement.css('background-color', '#e8f5e9');
+            $rowElement.find('td').css('background-color', '#e8f5e9');
+        }
+    }
+}
+;
+
+
+	// 示例：假设要校验C列的值是否等于"禁止提交"
+	var currentRow = FR.cellStr2ColumnRow(this.options.location).row;
+	var checkValue = _g().getCellValue(1, 18, currentRow); // 获取C列当前行值（参数说明：0表示第一个sheet，2表示第3列，从0开始索引）
+	var checkValue_t = _g().getCellValue(1, 21, currentRow); // 获取C列当前行值（参数说明：0表示第一个sheet，2表示第3列，从0开始索引） 
+	if (checkValue == "1" && checkValue_t != "0") {
+	    FR.Msg.alert("提交失败", "目标列包含禁止提交的值");
+	    return false; // 终止提交动作
+	} else {
+	    // 触发真实的提交操作（需另有一个隐藏的提交按钮）
+	    _g().getWidgetByName("submitButton").fireEvent("click"); 
+	}

@@ -94,8 +94,8 @@ left  join
 )b on b.customer_code=a.customer_code
 left join 
 (select shop_code,company_code as agreement_company_code from csx_dim.csx_dim_shop where sdt='current') c on a.agreement_dc_code=c.shop_code
-where a.sdt>='20250401' 
-and a.sdt<='20250630'
+where a.sdt>='20250701' 
+and a.sdt<='20250930'
     and (b.strategy_status =1 or a.customer_code in('243884','232923'))
     -- and partner_type_code not  in (1, 3)
 group by a.customer_code,b.customer_name,a.business_type_name,strategy_user_name,
@@ -112,7 +112,7 @@ from tmp_sale_detail a
 left join 
 (select customer_code,business_type_name
  from csx_analyse.csx_analyse_sales_new_customer_info_mf
- where smt>='202504'
+ where smt>='202507'
  group by customer_code,business_type_name
  ) b on a.customer_code=b.customer_code and  a.business_type_name=b.business_type_name
 left join 

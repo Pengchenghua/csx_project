@@ -509,9 +509,9 @@ select substr(`date`,1,4), count(weekend_holiday_flag ),
 		sum(if(weekend_holiday_flag=0,1,0)) as b
 			 from csx_analyse.csx_analyse_date_weekend_holiday_yf
 			 where(( `date` >= '20240101'
-				and `date` <= '20240928'
+				and `date` <= '20241019'
 			) or ( `date` >= '20250101'
-				and `date` <= '20250928'
+				and `date` <= '20251019'
 			)
 			)
 			-- and weekend_holiday_flag=0
@@ -520,12 +520,12 @@ select substr(`date`,1,4), count(weekend_holiday_flag ),
 ;
 
 select substr(`date`,1,6),count(`date`), 
-		sum(if( weekend_holiday_flag=0 and substr(`date`,7,2) <='28' ,1,0)) as days,
+		sum(if( weekend_holiday_flag=0 and substr(`date`,7,2) <='19' ,1,0)) as days,
 		sum(if( weekend_holiday_flag=0  ,1,0)) all_days,
-		sum(if( weekend_holiday_flag=0  ,1,0))-sum(if( weekend_holiday_flag=0 and substr(`date`,7,2) <='28' ,1,0))  diff_days
+		sum(if( weekend_holiday_flag=0  ,1,0))-sum(if( weekend_holiday_flag=0 and substr(`date`,7,2) <='19' ,1,0))  diff_days
 			 from csx_analyse.csx_analyse_date_weekend_holiday_yf
-			 where(( `date` >= '20250901'
-				and `date` <= '20250930'
+			 where(( `date` >= '20251001'
+				and `date` <= '20251031'
 			) or ( `date` >= '20240901'
 				and `date` <= '20240930'
 			))

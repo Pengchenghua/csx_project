@@ -5,8 +5,8 @@
 2、销售管家逾期明细表：csx_analyse.csx_analyse_fr_hr_red_black_service_manager_receivable_overdue
 3、销售管家目标表：csx_analyse.csx_analyse_source_write_hr_service_red_black_target_mf
 4、保证金明细表：csx_analyse_fr_hr_red_black_break_deposit_overdue_detail
-5、管家评价表： csx_ods.csx_ods_csx_b2b_study_fm_user_form_data_df a LEFT JOIN csx_ods.csx_ods_csx_b2b_study_questionnaire_paper_df
-
+5、管家评价表： csx_analyse.csx_analyse_fr_hr_customer_evaluation_detail_mf、 csx_ods.csx_ods_csx_b2b_study_fm_user_form_data_df a LEFT JOIN csx_ods.csx_ods_csx_b2b_study_questionnaire_paper_df
+6、结果表：csx_analyse_fr_hr_red_black_service_manager_result_mf
 
 
 -- ******************************************************************** 

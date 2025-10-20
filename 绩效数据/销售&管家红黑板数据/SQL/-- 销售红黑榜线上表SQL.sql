@@ -9,7 +9,8 @@
 6、销售员评分结果表： csx_analyse_fr_hr_red_balck_sales_score_result_mf
 7、销售经理评分结果表： csx_analyse_fr_hr_red_balck_sales_manager_score_result_mf
 8、新客信息： csx_analyse.csx_analyse_hr_red_black_new_customer_info_mf   按照福利取当月的履约金额，日配、BBC取当月1-20号，20号后到下月20号。
-
+9、销售员目标表：csx_analyse.csx_analyse_source_write_hr_sales_red_black_target_mf
+10、销售经理目标表：csx_analyse.csx_analyse_source_write_hr_sales_manager_red_black_target_mf
 -- ******************************************************************** 
 -- @功能描述：红黑榜销售员信息表
 -- @创建者： 彭承华 

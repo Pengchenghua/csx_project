@@ -58,7 +58,7 @@ select
 	direct_delivery_type
 from csx_dws.csx_dws_sale_detail_di a 
 where 1=1
-and sdt>='20250801' and sdt<='20250831'
+and sdt>='20250901' and sdt<='20250930'
 and business_type_code in ('1','2','6','9','10')
 )a 
 join tmp_goods_info b on a.goods_code=b.goods_code

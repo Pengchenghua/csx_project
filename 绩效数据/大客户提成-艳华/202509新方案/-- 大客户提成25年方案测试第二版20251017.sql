@@ -292,7 +292,7 @@ from tmp_customer_info a
  tmp_sales_info j  on a.bbc_sales_number=j.user_number
 ;
 
-select * from csx_analyse_tmp.csx_analyse_customer_sale_service_info_rate_qc_mi
+select * from csx_analyse_tmp.csx_analyse_customer_sale_service_info_rate_qc_mi_01
 ;
 
 
@@ -644,5 +644,6 @@ left join
 	)g on a.customer_code=g.customer_code	
 where (a.sale_amt is not null 
 or a.source_sys='BEGIN')
-and e.category_second is null;	-- 来源系统 MALL B端销售 BBC BBC端 BEGIN期初
+and e.category_second is null
+;	-- 来源系统 MALL B端销售 BBC BBC端 BEGIN期初
 

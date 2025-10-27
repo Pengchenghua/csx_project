@@ -1,6 +1,5 @@
 -- 大客户提成 签呈表需查询的对应表
 
--- 那延长的只有华西和北京哈，华西2个月 
 select 
 concat_ws('-',substr(a.sdt,1,6),a.customer_no) as biz_id,
 a.customer_id,
@@ -65,7 +64,7 @@ select *
 from csx_analyse.csx_analyse_report_crm_customer_sale_service_manager_info_df 
 where sdt='20250930'
 and customer_no in 
-('200460'
+('259876'
 ,'235930'
 )
  

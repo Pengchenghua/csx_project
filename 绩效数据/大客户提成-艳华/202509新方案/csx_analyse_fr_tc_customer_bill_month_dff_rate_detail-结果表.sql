@@ -412,7 +412,7 @@ from
         a.sale_amt,
         a.profit
 	)a
-)a
+ )a
 left join csx_analyse_tmp.tmp_tc_cust_salary_detail_person_info b on split(a.sales_id,'、')[0] =b.user_id
 ;
 

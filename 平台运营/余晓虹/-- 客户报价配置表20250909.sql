@@ -26,7 +26,7 @@ with tmp_csx_price_prod_customer_config_df as
         when customer_price_cut_status='true' then '控制' end) as `截断处理，偶数结尾` 
 FROM csx_ods.csx_ods_csx_price_prod_customer_config_df
 LATERAL VIEW explode(split(regexp_replace(substr(customer_link, 2, length(customer_link) - 2), '\\}\\,', '\\}\\|\\|'), '\\|\\|')) r1 AS item_json
-where sdt='20250909' -- 日期每次换成昨日的日期就行了
+where sdt='20251027' -- 日期每次换成昨日的日期就行了
 )
 select b.performance_region_name as `大区`,
     b.performance_province_name as `省区`,

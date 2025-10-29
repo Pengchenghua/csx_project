@@ -18,7 +18,7 @@ a.work_no_new,
 a.sales_name_new,
 rp_sales_user_work_no_new as rp_sales_number	,
 rp_sales_user_name_new as rp_sales_name	,
-rp_sales_user_position_new ,
+-- rp_sales_user_position_new ,
 fl_sales_user_work_no_new as fl_sales_number,
 fl_sales_user_name_new as fl_sales_name,
 bbc_sales_user_work_no_new as bbc_sales_number,
@@ -64,8 +64,22 @@ select *
 from csx_analyse.csx_analyse_report_crm_customer_sale_service_manager_info_df 
 where sdt='20250930'
 and customer_no in 
-('259876'
-,'235930'
+('254511',
+ '252181',
+ '256641',
+ '252183',
+ '252191',
+ '252185',
+ '151497',
+ '254080',
+ '252999',
+ '252189',
+ '252186',
+ '252195',
+ '252193',
+ '252182',
+ '257481'
+
 )
  
 )a 

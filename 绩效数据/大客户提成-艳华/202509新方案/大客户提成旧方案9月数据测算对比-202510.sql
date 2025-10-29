@@ -95,7 +95,7 @@ from
 (
 	select *
 	from csx_analyse.csx_analyse_report_crm_customer_sale_service_manager_info_df
-	where sdt=regexp_replace(last_day(add_months('${sdt_yes_date}',-1)),'-','')
+	where sdt=regexp_replace(last_day(add_months('${sdt_yes_date}',-2)),'-','')
 )a
 left join
 (
@@ -125,7 +125,7 @@ left join
 	-- from csx_analyse.csx_analyse_tc_customer_special_rules_mf 
 	from csx_analyse.csx_analyse_tc_customer_special_rules_2023_1mf
 	where smt=substr(regexp_replace(last_day(add_months('${sdt_yes_date}',-1)),'-',''),1,6)
-	and smt_date=substr(regexp_replace(last_day(add_months('${sdt_yes_date}',-1)),'-',''),1,6)
+	and smt_date=substr(regexp_replace(last_day(add_months('${sdt_yes_date}',-2)),'-',''),1,6)
 	and category_first like '%大客户提成-调整对应人员比例%'
 ) d on d.customer_code=a.customer_no
 where d.category_first is null
@@ -165,7 +165,7 @@ select
 	smt
 from csx_analyse.csx_analyse_tc_customer_person_rate_special_rules_mf
 where smt=substr(regexp_replace(last_day(add_months('${sdt_yes_date}',-1)),'-',''),1,6)
-and smt_date=substr(regexp_replace(last_day(add_months('${sdt_yes_date}',-1)),'-',''),1,6)
+and smt_date=substr(regexp_replace(last_day(add_months('${sdt_yes_date}',-2)),'-',''),1,6)
 ) 
 -- insert overwrite table csx_analyse.csx_analyse_customer_sale_service_info_rate_qc_mi partition(smt)
 select 	biz_id,
@@ -312,7 +312,7 @@ left join
 		-- if(bbc_service_user_sale_fp_rate=0.7,0.6,if(bbc_service_user_sale_fp_rate=0.3,0.4,if(bbc_service_user_sale_fp_rate=0.2,0.3,if(bbc_service_user_sale_fp_rate=0.1,0.2,bbc_service_user_sale_fp_rate)))) as bbc_service_user_fp_rate	
 	-- from csx_analyse.csx_analyse_customer_sale_service_info_rate_use_mi
 	from csx_analyse_tmp.csx_analyse_customer_sale_service_info_rate_qc_mi
-	where smt=substr(regexp_replace(add_months('${sdt_yes_date}',-1),'-',''), 1, 6)
+	where smt=substr(regexp_replace(add_months('${sdt_yes_date}',-2),'-',''), 1, 6)
 )b on b.customer_no=a.customer_code
 -- 客户信控的账期
 left join
@@ -367,7 +367,7 @@ left join   -- CRM客户信息取月最后一天
 				select customer_code
 				from csx_analyse.csx_analyse_tc_customer_special_rules_2023_1mf 
 				where smt=substr(regexp_replace(last_day(add_months('${sdt_yes_date}',-1)),'-',''),1,6)
-				and smt_date=substr(regexp_replace(last_day(add_months('${sdt_yes_date}',-1)),'-',''),1,6)
+				and smt_date=substr(regexp_replace(last_day(add_months('${sdt_yes_date}',-2)),'-',''),1,6)
 				and category_second like '%纳入大客户提成计算%'
 			)))		
 	)d on d.customer_code=a.customer_code

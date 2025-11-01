@@ -8,7 +8,7 @@ select * from csx_analyse.csx_analyse_customer_sale_service_info_rate_qc_mi wher
 -- @修改人：
 -- @修改内容：更新系数,
 -- ******************************************************************** 
-create table csx_analyse.csx_analyse_customer_sale_service_info_rate_qc_mi
+create table csx_analyse_tmp.csx_analyse_customer_sale_service_info_rate_qc_mi_old
 as
 with tmp_customer_info as 
 (
@@ -119,53 +119,6 @@ left join
 	and tc_sdt=regexp_replace(last_day(add_months('${sdt_yes_date}',-1)),'-','')
 )b3 on a.bbc_service_user_work_no_new=b3.service_user_work_no
 
-left join 
-(
-	select * 
-	-- from csx_analyse.csx_analyse_tc_customer_special_rules_mf 
-	from csx_analyse.csx_analyse_tc_customer_special_rules_2023_1mf
-	where smt=substr(regexp_replace(last_day(add_months('${sdt_yes_date}',-1)),'-',''),1,6)
-	and smt_date=substr(regexp_replace(last_day(add_months('${sdt_yes_date}',-1)),'-',''),1,6)
-	and category_first like '%大客户提成-调整对应人员比例%'
-) d on d.customer_code=a.customer_no
-where d.category_first is null
-union all 
-select 
-	biz_id,
-	customer_id,
-	customer_no,
-	customer_name,
-	channel_code,
-	channel_name,
-	region_code,
-	region_name,
-	province_code,
-	province_name,
-	city_group_code,
-	city_group_name,
-	sales_id,
-	work_no,
-	sales_name,
-	rp_service_user_id,
-	rp_service_user_work_no,
-	rp_service_user_name,
-	fl_service_user_id,
-	fl_service_user_work_no,
-	fl_service_user_name,
-	bbc_service_user_id,
-	bbc_service_user_work_no,
-	bbc_service_user_name,
-	cast(rp_sales_sale_fp_rate as decimal(20,6)) rp_sales_sale_fp_rate,
-	cast(fl_sales_sale_fp_rate as decimal(20,6)) fl_sales_sale_fp_rate,
-	cast(bbc_sales_sale_fp_rate as decimal(20,6)) bbc_sales_sale_fp_rate,
-	cast(rp_service_user_sale_fp_rate as decimal(20,6)) rp_service_user_fp_rate,
-	cast(fl_service_user_sale_fp_rate as decimal(20,6)) fl_service_user_fp_rate,
-	cast(bbc_service_user_sale_fp_rate as decimal(20,6)) bbc_service_user_fp_rate,
-	from_utc_timestamp(current_timestamp(),'GMT') update_time,
-	smt
-from csx_analyse.csx_analyse_tc_customer_person_rate_special_rules_mf
-where smt=substr(regexp_replace(last_day(add_months('${sdt_yes_date}',-1)),'-',''),1,6)
-and smt_date=substr(regexp_replace(last_day(add_months('${sdt_yes_date}',-1)),'-',''),1,6)
 ) 
 -- insert overwrite table csx_analyse.csx_analyse_customer_sale_service_info_rate_qc_mi partition(smt)
 select 	biz_id,
@@ -283,9 +236,15 @@ from csx_analyse_tmp.tmp_tc_cust_order_detail a
 left join
 (
 	select
-		region_code,region_name,province_code,province_name,city_group_code,city_group_name,
-		regexp_replace(last_day(add_months('${sdt_yes_date}',-1)),'-','') as sdt,customer_no,customer_name,
-		sales_id,
+		region_code,
+		region_name,
+		province_code,
+		province_name,
+		city_group_code,
+		city_group_name,
+	    customer_no,
+	    customer_name,
+ 		sales_id,
 		work_no,
 		sales_name,
 		rp_service_user_id,
@@ -311,9 +270,8 @@ left join
 		-- if(fl_service_user_sale_fp_rate=0.7,0.6,if(fl_service_user_sale_fp_rate=0.3,0.4,if(fl_service_user_sale_fp_rate=0.2,0.3,if(fl_service_user_sale_fp_rate=0.1,0.2,fl_service_user_sale_fp_rate)))) as fl_service_user_fp_rate,
 		-- if(bbc_service_user_sale_fp_rate=0.7,0.6,if(bbc_service_user_sale_fp_rate=0.3,0.4,if(bbc_service_user_sale_fp_rate=0.2,0.3,if(bbc_service_user_sale_fp_rate=0.1,0.2,bbc_service_user_sale_fp_rate)))) as bbc_service_user_fp_rate	
 	-- from csx_analyse.csx_analyse_customer_sale_service_info_rate_use_mi
-	from csx_analyse_tmp.csx_analyse_customer_sale_service_info_rate_qc_mi
-	where smt=substr(regexp_replace(add_months('${sdt_yes_date}',-1),'-',''), 1, 6)
-)b on b.customer_no=a.customer_code
+	from csx_analyse_tmp.csx_analyse_customer_sale_service_info_rate_qc_mi_old
+ )b on b.customer_no=a.customer_code
 -- 客户信控的账期
 left join
      (
@@ -469,7 +427,7 @@ select
 	substr(regexp_replace(last_day(add_months('${sdt_yes_date}',-1)),'-',''),1,6) as smt_ct,
 	-- a.unpay_amt,	-- 历史核销剩余金额
 	substr(regexp_replace(last_day(add_months('${sdt_yes_date}',-1)),'-',''),1,6) as smt -- 统计日期 
-from csx_analyse_tmp.tmp_tc_cust_credit_bill_xianjin_bujiu a
+from csx_analyse_tmp.tmp_tc_cust_credit_bill_xianjin_bujiu_01 a
 left join 
 (
 select source_bill_no,
@@ -478,7 +436,7 @@ sum(case when business_type_name='BBC联营' then sale_amt end) sale_amt_bbc_ly,
 sum(case when business_type_name='BBC自营' then sale_amt end) sale_amt_bbc_zy,
 sum(case when business_type_name='BBC联营' then sale_amt end)/sum(sale_amt) sale_amt_bbc_ly_rate,
 sum(case when business_type_name='BBC自营' then sale_amt end)/sum(sale_amt) sale_amt_bbc_zy_rate
-from csx_analyse_tmp.tmp_tc_cust_credit_bill_xianjin_bujiu
+from csx_analyse_tmp.tmp_tc_cust_credit_bill_xianjin_bujiu_01
 where business_type_name like 'BBC%' 
 group by source_bill_no
 )b on a.source_bill_no=b.source_bill_no
@@ -642,7 +600,6 @@ left join
 ;	
 	
 
-	
 
 -- 客户+结算月+回款时间系数：各业务类型毛利率提成比例
 drop table if exists csx_analyse_tmp.tmp_tc_business_billmonth_profit_rate_tc;

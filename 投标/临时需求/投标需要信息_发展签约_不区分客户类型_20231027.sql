@@ -15,8 +15,8 @@ from
 	from 
 		csx_dws.csx_dws_sale_detail_di
 	where 
-		sdt>='20190101' and sdt<='20250715'
-		and channel_code in('1','7','9')
+		sdt>='20190101' and sdt<='20251029'
+		and channel_code !='2'
 	group by 
 		performance_province_name,performance_city_name,sign_company_code,customer_code
 	)a 

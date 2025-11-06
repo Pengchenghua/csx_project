@@ -95,7 +95,7 @@ from
 (
 	select *
 	from csx_analyse.csx_analyse_report_crm_customer_sale_service_manager_info_df
-	where sdt=regexp_replace(last_day(add_months('${sdt_yes_date}',-1)),'-','')
+	where sdt=regexp_replace(last_day(add_months('${sdt_yes_date}',-2)),'-','')
 )a
 left join
 (
@@ -119,6 +119,56 @@ left join
 	and tc_sdt=regexp_replace(last_day(add_months('${sdt_yes_date}',-1)),'-','')
 )b3 on a.bbc_service_user_work_no_new=b3.service_user_work_no
 
+<<<<<<< HEAD
+=======
+left join 
+(
+	select * 
+	-- from csx_analyse.csx_analyse_tc_customer_special_rules_mf 
+	from csx_analyse.csx_analyse_tc_customer_special_rules_2023_1mf
+	where smt=substr(regexp_replace(last_day(add_months('${sdt_yes_date}',-1)),'-',''),1,6)
+	and smt_date=substr(regexp_replace(last_day(add_months('${sdt_yes_date}',-2)),'-',''),1,6)
+	and category_first like '%大客户提成-调整对应人员比例%'
+) d on d.customer_code=a.customer_no
+where d.category_first is null
+union all 
+select 
+	biz_id,
+	customer_id,
+	customer_no,
+	customer_name,
+	channel_code,
+	channel_name,
+	region_code,
+	region_name,
+	province_code,
+	province_name,
+	city_group_code,
+	city_group_name,
+	sales_id,
+	work_no,
+	sales_name,
+	rp_service_user_id,
+	rp_service_user_work_no,
+	rp_service_user_name,
+	fl_service_user_id,
+	fl_service_user_work_no,
+	fl_service_user_name,
+	bbc_service_user_id,
+	bbc_service_user_work_no,
+	bbc_service_user_name,
+	cast(rp_sales_sale_fp_rate as decimal(20,6)) rp_sales_sale_fp_rate,
+	cast(fl_sales_sale_fp_rate as decimal(20,6)) fl_sales_sale_fp_rate,
+	cast(bbc_sales_sale_fp_rate as decimal(20,6)) bbc_sales_sale_fp_rate,
+	cast(rp_service_user_sale_fp_rate as decimal(20,6)) rp_service_user_fp_rate,
+	cast(fl_service_user_sale_fp_rate as decimal(20,6)) fl_service_user_fp_rate,
+	cast(bbc_service_user_sale_fp_rate as decimal(20,6)) bbc_service_user_fp_rate,
+	from_utc_timestamp(current_timestamp(),'GMT') update_time,
+	smt
+from csx_analyse.csx_analyse_tc_customer_person_rate_special_rules_mf
+where smt=substr(regexp_replace(last_day(add_months('${sdt_yes_date}',-1)),'-',''),1,6)
+and smt_date=substr(regexp_replace(last_day(add_months('${sdt_yes_date}',-2)),'-',''),1,6)
+>>>>>>> 3f5ea3b61f8dad3b58b9b4021879c6e879521282
 ) 
 -- insert overwrite table csx_analyse.csx_analyse_customer_sale_service_info_rate_qc_mi partition(smt)
 select 	biz_id,
@@ -270,8 +320,14 @@ left join
 		-- if(fl_service_user_sale_fp_rate=0.7,0.6,if(fl_service_user_sale_fp_rate=0.3,0.4,if(fl_service_user_sale_fp_rate=0.2,0.3,if(fl_service_user_sale_fp_rate=0.1,0.2,fl_service_user_sale_fp_rate)))) as fl_service_user_fp_rate,
 		-- if(bbc_service_user_sale_fp_rate=0.7,0.6,if(bbc_service_user_sale_fp_rate=0.3,0.4,if(bbc_service_user_sale_fp_rate=0.2,0.3,if(bbc_service_user_sale_fp_rate=0.1,0.2,bbc_service_user_sale_fp_rate)))) as bbc_service_user_fp_rate	
 	-- from csx_analyse.csx_analyse_customer_sale_service_info_rate_use_mi
+<<<<<<< HEAD
 	from csx_analyse_tmp.csx_analyse_customer_sale_service_info_rate_qc_mi_old
  )b on b.customer_no=a.customer_code
+=======
+	from csx_analyse_tmp.csx_analyse_customer_sale_service_info_rate_qc_mi
+	where smt=substr(regexp_replace(add_months('${sdt_yes_date}',-2),'-',''), 1, 6)
+)b on b.customer_no=a.customer_code
+>>>>>>> 3f5ea3b61f8dad3b58b9b4021879c6e879521282
 -- 客户信控的账期
 left join
      (
@@ -325,7 +381,7 @@ left join   -- CRM客户信息取月最后一天
 				select customer_code
 				from csx_analyse.csx_analyse_tc_customer_special_rules_2023_1mf 
 				where smt=substr(regexp_replace(last_day(add_months('${sdt_yes_date}',-1)),'-',''),1,6)
-				and smt_date=substr(regexp_replace(last_day(add_months('${sdt_yes_date}',-1)),'-',''),1,6)
+				and smt_date=substr(regexp_replace(last_day(add_months('${sdt_yes_date}',-2)),'-',''),1,6)
 				and category_second like '%纳入大客户提成计算%'
 			)))		
 	)d on d.customer_code=a.customer_code

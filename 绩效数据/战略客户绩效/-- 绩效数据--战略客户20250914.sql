@@ -36,8 +36,8 @@ left  join
 left join 
 (select shop_code,company_code as agreement_company_code from csx_dim.csx_dim_shop where sdt='current') c on a.agreement_dc_code=c.shop_code
 where  a.channel_code in ('1','7','9')--  and  a.business_type_name  in ('城市服务商','BBC','日配业务','福利业务')  
-and a.sdt>='20250601' 
-and a.sdt<='20250831'
+and a.sdt>='20251001' 
+and a.sdt<='20251031'
     and (b.strategy_status =1 or a.customer_code in('243884','232923'))
 
 group by a.customer_code,b.customer_name,a.business_type_name,strategy_user_name,

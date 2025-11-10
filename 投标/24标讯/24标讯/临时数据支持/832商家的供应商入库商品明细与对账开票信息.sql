@@ -1,5 +1,107 @@
 -- 20240613确认 供应商对账开票信息没有到品类商品颗粒度的
 
+-- 832 20251110更新
+select a.company_code,
+  c.company_name,
+  a.supplier_code,
+  b.supplier_name,
+  substr(a.smonth, 1, 4) syear,
+  substr(a.account_period, 1, 4) smonth,
+  count(distinct a.smonth) count_m,
+  sum(a.statement_amount) statement_amount
+from (
+    select company_code,
+      company_name,
+      supplier_code,
+      supplier_name,
+      bill_amt statement_amount,
+      check_ticket_order_code check_ticket_no,
+      merge_account_order_code merge_account_no,
+      bill_code statement_no,
+      payment_status_code payment_status,
+      payment_order_code payment_no,
+      bill_type_code statement_type,
+      regexp_replace(substr(bill_time, 1, 7), '-', '') as smonth ,-- 采购结算对账单	 
+      -- audit_time,     -- 票核时间
+      regexp_replace(substr(account_period, 1, 7),'-','') account_period  -- 付款过账时间
+    from csx_dwd.csx_dwd_pss_statement_statement_account_di
+    where bill_code is not null
+      and bill_code != ''
+    union all
+    select company_code,
+      company_name,
+      supplier_code,
+      supplier_name,
+      bill_amt statement_amount,
+      check_ticket_order_code check_ticket_no,
+      merge_account_order_code merge_account_no,
+      merge_account_order_code as statement_no,
+      payment_status_code payment_status,
+      payment_order_code payment_no,
+      bill_type_code statement_type,
+      regexp_replace(substr(bill_time, 1, 7), '-', '') as smonth,
+      -- audit_time,     -- 票核时间
+      regexp_replace(substr(account_period, 1, 7),'-','')  account_period  -- 付款过账时间
+    from csx_dwd.csx_dwd_pss_statement_statement_account_di
+    where (
+        bill_code is null
+        or bill_code = ''
+      )
+      and merge_account_order_code is not null
+      and merge_account_order_code != ''
+  ) a
+  left join (
+    select supplier_code,
+      -- 供应商编号
+      supplier_name -- 供应商名称
+    from csx_dim.csx_dim_basic_supplier
+    where sdt = 'current'
+  ) b on a.supplier_code = b.supplier_code
+  left join (
+    select company_code,
+      company_name
+    from csx_dim.csx_dim_basic_company
+    where sdt = 'current'
+  ) c on a.company_code = c.company_code
+where a.supplier_code in('20037948',
+'20041275',
+'20043215',
+'20043707',
+'20044655',
+'20044869',
+'20044903',
+'20044906',
+'20045052',
+'20045062',
+'20045077',
+'20045204',
+'20046104',
+'20051865',
+'20054736',
+'20054957',
+'20055454',
+'20058764',
+'20060220',
+'20060261',
+'20063932',
+'20063951',
+'20066719',
+'20067525',
+'20068210',
+'20068487',
+'20072454',
+'20072890',
+'20074705',
+'20076647',
+'20076919'
+)
+group by a.company_code,
+  c.company_name,
+  a.supplier_code,
+  b.supplier_name,
+  substr(a.smonth, 1, 4),
+  substr(a.account_period, 1, 4)
+;
 
 -- 832商家的供应商销售数据 20231108  从销售表取可能不准，因此从财务侧对账开票数据取
 -- 财务对账数据

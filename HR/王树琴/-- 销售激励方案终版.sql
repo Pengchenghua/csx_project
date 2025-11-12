@@ -27,10 +27,10 @@
         (select customer_no,rp_service_user_work_no,		
 	rp_service_user_name
 	from  csx_analyse.csx_analyse_customer_sale_service_info_rate_qc_mi 
-	where smt='202509') b on a.customer_code=b.customer_no
+	where smt='202510') b on a.customer_code=b.customer_no
       where
-        sdt >= '20250901'
-        and sdt <= '20250930'
+        sdt >= '20251001'
+        and sdt <= '20251031'
         -- and channel_code in ('1', '7', '9')
         and business_type_code in ('1') 
         and goods_code in ('2059618',
@@ -95,10 +95,10 @@
         (select customer_no,rp_service_user_work_no,		
 	rp_service_user_name
 	from  csx_analyse.csx_analyse_customer_sale_service_info_rate_qc_mi 
-	where smt='202509') b on a.customer_code=b.customer_no
+	where smt='202510') b on a.customer_code=b.customer_no
       where
-        sdt >= '20250901'
-        and sdt <= '20250930'
+        sdt >= '20251001'
+        and sdt <= '20251031'
         -- and channel_code in ('1', '7', '9')
         and business_type_code in ('2','6','10') 
         and goods_code in ('2080079',

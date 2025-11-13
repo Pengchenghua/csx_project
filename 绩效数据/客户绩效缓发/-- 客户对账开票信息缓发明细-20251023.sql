@@ -2,6 +2,7 @@
 -- 永辉平台任务 csx_analyse_tmp_bill_settle
 -- 
 -- 创建管家销售员信息 
+drop table csx_analyse_tmp.tmp_csx_dim_crm_customer_business_ownership;
 create table csx_analyse_tmp.tmp_csx_dim_crm_customer_business_ownership as 
 with  tmp_csx_dim_crm_customer_business_ownership as 
  (select

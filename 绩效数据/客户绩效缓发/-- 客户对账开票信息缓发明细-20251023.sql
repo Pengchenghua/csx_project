@@ -7,8 +7,8 @@ with  tmp_csx_dim_crm_customer_business_ownership as
  (select
   customer_no as customer_code,
   customer_name,
-  work_no_new,
-  sales_name_new,
+  rp_sales_user_work_no_new as work_no_new,
+  rp_sales_user_name_new as sales_name_new,
   a.region_code as performance_region_code,
   a.region_name as performance_region_name,
   a.province_code as performance_province_code,
@@ -22,14 +22,14 @@ from
   csx_analyse.csx_analyse_report_crm_customer_sale_service_manager_info_df a
 where
   sdt = regexp_replace('2025-10-22', '-', '')
-    -- and rp_service_user_work_no_new<>''
+    and (rp_service_user_work_no_new<>'' or rp_sales_user_work_no_new<>'')
 union all
 
 select
   customer_no as customer_code,
   customer_name,
-  work_no_new,
-  sales_name_new,
+  fl_sales_user_work_no_new as work_no_new,
+  fl_sales_user_name_new as sales_name_new,
   a.region_code as performance_region_code,
   a.region_name as performance_region_name,
   a.province_code as performance_province_code,
@@ -43,13 +43,13 @@ from
   csx_analyse.csx_analyse_report_crm_customer_sale_service_manager_info_df a
 where
   sdt = regexp_replace('2025-10-22', '-', '')
---   and fl_service_user_work_no_new<>''
+  and (fl_service_user_work_no_new<>'' or fl_sales_user_work_no_new<>'')
 union all
 select
   customer_no as customer_code,
   customer_name,
-  work_no_new,
-  sales_name_new,
+  bbc_sales_user_work_no_new as work_no_new,
+  bbc_sales_user_name_new as sales_name_new,
   a.region_code as performance_region_code,
   a.region_name as performance_region_name,
   a.province_code as performance_province_code,
@@ -63,15 +63,15 @@ from
   csx_analyse.csx_analyse_report_crm_customer_sale_service_manager_info_df a
 where
   sdt = regexp_replace('2025-10-22', '-', '')
---   and bbc_service_user_work_no_new<>''
+  and (bbc_service_user_work_no_new<>'' or bbc_sales_user_work_no_new<>'')
   )
   ,
   tmp_sale_info as 
  (select
   a.customer_code,
   a.customer_name,
-  a.work_no_new,
-  a.sales_name_new,
+  b.work_no_new,
+  b.sales_name_new,
   a.performance_region_code,
   a.performance_region_name,
   a.performance_province_code,
@@ -85,8 +85,6 @@ from
 (select
   customer_no as customer_code,
   customer_name,
-  work_no_new,
-  sales_name_new,
   a.region_code as performance_region_code,
   a.region_name as performance_region_name,
   a.province_code as performance_province_code,
@@ -98,7 +96,8 @@ from
 where
   sdt = regexp_replace('2025-10-22', '-', '')
   )a 
-  left join tmp_csx_dim_crm_customer_business_ownership b on a.customer_code=b.customer_code
+  left join tmp_csx_dim_crm_customer_business_ownership b
+     on a.customer_code=b.customer_code
  ) select * from tmp_csx_dim_crm_customer_business_ownership
  ;
 
@@ -154,9 +153,9 @@ tmp_bill_order as (
     reconciliation_period,
     project_begin_date,
     project_end_date,
-	bill_start_date,
-	bill_end_date,
-	date_add(bill_end_date,1) statement_date,
+	  bill_start_date,
+	  bill_end_date,
+	  date_add(bill_end_date,1) statement_date,
     nvl(sub_customer_code,'') as sub_customer_code,
     cast(order_amt as decimal(26,6)) order_amt,  -- 销售订单金额
     (case when check_bill_status in (15,20) then residue_total_amount else 0 end)

@@ -509,9 +509,9 @@ select substr(`date`,1,4), count(weekend_holiday_flag ),
 		sum(if(weekend_holiday_flag=0,1,0)) as b
 			 from csx_analyse.csx_analyse_date_weekend_holiday_yf
 			 where(( `date` >= '20240101'
-				and `date` <= '20241110'
+				and `date` <= '20241116'
 			) or ( `date` >= '20250101'
-				and `date` <= '20251110'
+				and `date` <= '20251116'
 			)
 			)
 			-- and weekend_holiday_flag=0

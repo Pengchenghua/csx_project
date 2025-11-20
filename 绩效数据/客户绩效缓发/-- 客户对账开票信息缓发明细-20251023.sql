@@ -1,7 +1,4 @@
--- 参数 data_range_date1、data_range_date、partition_date
--- 客户对账开票信息缓发明细-20251023
--- 永辉平台任务 csx_analyse_tmp_bill_settle
--- 
+
 -- 创建管家销售员信息 
 drop table csx_analyse_tmp.tmp_csx_dim_crm_customer_business_ownership;
 create table csx_analyse_tmp.tmp_csx_dim_crm_customer_business_ownership as 

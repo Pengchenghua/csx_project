@@ -100,6 +100,7 @@ left join
     
     
 
+ 
 -- 采购订单关联凭证批次单号
 drop table csx_analyse_tmp.csx_analyse_tmp_source_order ;
 create   table csx_analyse_tmp.csx_analyse_tmp_source_order as 
@@ -145,28 +146,30 @@ LEFT JOIN
 (select credential_no,
     batch_no,
     goods_code,
-    real_location_code,
-    source_order_no,
-    wms_batch_no,
-    wms_order_no,
+    dc_code real_location_code,
+    -- source_order_no,
+    link_wms_batch_no,
+    link_wms_order_no,
     move_type_code,
     qty,
     amt,
     price
- from   csx_dws.csx_dws_cas_credential_detail_di a 
+ from   csx_dwd.csx_dwd_cas_accounting_stock_log_item_di a 
     where sdt>='${sdate}'
         and sdt<='${edate}'
        -- and move_type_code ='101A'
-        and direction_flag ='+'
+        -- and direction_flag ='+'
         and in_out_type='PURCHASE_IN'
-) b on a.purchase_order_code=b.source_order_no 
+) b on a.order_code=b.link_wms_order_no 
     and a.goods_code=b.goods_code
-    and a.batch_code=b.wms_batch_no 
+    and a.batch_code=b.link_wms_batch_no 
 WHERE   sdt>='${sdate}'
     and sdt<='${edate}'
     and source_type_code not in ('4','15','18') -- 剔除 4项目合伙人、15联营直送、18城市服务商
   --  and super_class_code in (1,2)    -- 1供应商订单、2供应商退货单
 ;
+
+ 
 
 
 
@@ -254,7 +257,7 @@ create     table csx_analyse_tmp.csx_analyse_tmp_source_sale_detal as
        where sdt>='${s_date}'
         and sdt<='${edate}'
     --    and is_purchase_dc=1
-        and channel_name not in ('2','4', '6','5')
+        and channel_code not in ('2','4', '6','5')
  	    and business_type_code ='1'   -- 日配业务 
         and b.shop_low_profit_flag =0   -- 剔除DC直送仓
         and refund_order_flag =0            -- 正向单
@@ -318,7 +321,7 @@ WHERE sdt>='${sdate}'
   
  -- 根据批次号查找采购入库凭证 
  drop table  csx_analyse_tmp.csx_analyse_tmp_source_batch_sale_01;
- create       table  csx_analyse_tmp.csx_analyse_tmp_source_batch_sale_01 as 
+ create   table  csx_analyse_tmp.csx_analyse_tmp_source_batch_sale_01 as 
  select sdt,
     region_code,
     region_name,
@@ -363,21 +366,24 @@ from  csx_analyse_tmp.csx_analyse_tmp_source_batch_sale a
        batch_no as purchase_batch_no,
        dc_code as receive_dc_code,
        goods_code,
-       qty,
-       amt,
-       amt_no_tax,
-       price
+       (qty)qty,
+       (amt) amt,
+       (amt_no_tax) amt_no_tax,
+        price
 FROM  csx_dwd.csx_dwd_cas_accounting_stock_log_item_di
 WHERE sdt>='${sdate}'
     and sdt<='${edate}'
     and in_out_type='PURCHASE_IN'
     and in_or_out=0	
-  --  and move_type_code= '101A'	
+    and move_type_code= '101A'	
+    and link_wms_order_no like 'IN%'
+    -- and frozen_flag=0
   ) b on a.batch_no=b.purchase_batch_no and a.goods_code=b.goods_code
- -- where purchase_crdential_no is not null 
+  
+  where purchase_crdential_no is not null 
   ;
   
-  
+ 
   
   
   -- 根据成品批次号查找领料凭证号 
@@ -435,7 +441,7 @@ WHERE sdt>='${sdate}'
   AND in_out_type='FINISHED'
   and in_or_out=0
   ) b on a.batch_no=b.transfer_batch_no and a.goods_code=b.goods_code
--- where  b.transfer_crdential_no is not null 
+where  b.transfer_crdential_no is not null 
 ;
 
 
@@ -487,69 +493,7 @@ WHERE sdt>='${sdate}'
        batch_no ,
        goods_code
   ) b on a.transfer_crdential_no=b.meta_crdential_no 
-
 ;
-
-
--- 判断是否基地与集采
-
-drop table csx_analyse_tmp.csx_analyse_tmp_source_purchase_type;
-create table csx_analyse_tmp.csx_analyse_tmp_source_purchase_type as
-select
-  batch_no,
-  business_type,
-  central_purchase_tag,
-  source_order_no,
-  channel_type_name,
-  channel_type_code,
-  supplier_type_code,
-  supplier_type_name
-from
-  (
-    select
-      distinct batch_no
-    from
-      (
-        select
-          distinct meta_batch_no batch_no
-        from
-          csx_analyse_tmp.csx_analyse_tmp_source_batch_sale_03 a
-        union all
-        select
-          distinct batch_no
-        from
-          csx_analyse_tmp.csx_analyse_tmp_source_batch_sale_01
-        where
-          purchase_crdential_no is not null
-      ) a
-  ) a
-  left join (
-    SELECT
-      purchase_batch_no,
-      a.business_type,
-      central_purchase_tag,
-      source_order_no,
-      channel_type_name,
-      channel_type_code,
-      supplier_type_code,
-      supplier_type_name
-    FROM
-      csx_analyse_tmp.csx_analyse_tmp_source_order_02 a
-    group by
-      purchase_batch_no,
-      a.business_type,
-      source_order_no,
-      central_purchase_tag,
-      channel_type_name,
-      channel_type_code,
-      supplier_type_code,
-      supplier_type_name
-  ) b on a.batch_no = b.purchase_batch_no
-where
-  1 = 1
-  ;
-
-
 
 -- 计算占比，根据销售凭证号计算占比
 drop table csx_analyse_tmp.csx_analyse_tmp_source_batch_sale_04 ;
@@ -679,7 +623,7 @@ select sdt,
     supplier_type_code,
     supplier_type_name,
     transfer_crdential_flag,
-    if(b.transfer_crdential_no is not null ,1,0 )is_meta_order_flag          -- 原料订单标识是否关联上
+    if(b.transfer_crdential_no is not null ,1,0 ) is_meta_order_flag          -- 原料订单标识是否关联上
 from csx_analyse_tmp.csx_analyse_tmp_source_batch_sale_02 a
     left join (
         SELECT a.transfer_crdential_no,
@@ -745,7 +689,8 @@ from csx_analyse_tmp.csx_analyse_tmp_source_batch_sale_02 a
                             supplier_type_name,
                             sum(a.pur_qty) order_qty,
                             sum(a.pur_amt) order_amt
-                        FROM csx_analyse_tmp.csx_analyse_tmp_source_order_02 a --  where move_type_code='101A'
+                        FROM csx_analyse_tmp.csx_analyse_tmp_source_order_02 a
+                           where move_type_code='101A'
                         group by purchase_batch_no,
                             a.business_type,
                             source_order_no,
@@ -874,19 +819,21 @@ select
     if(transfer_crdential_flag=1,(a.sale_price/(1+tax_rate)*batch_qty*product_ratio-a.batch_amt_no_tax * a.product_ratio),0) product_profit_no_tax,
     if(transfer_crdential_flag=1,(sale_price*batch_qty*product_ratio-a.batch_amt * a.product_ratio)/((a.sale_price* batch_qty ) * a.product_ratio) ,0) as product_profit_rate,
     if(transfer_crdential_flag=1,(a.sale_price/(1+tax_rate)*batch_qty*product_ratio-a.batch_amt_no_tax * a.product_ratio)/(a.sale_price/(1+tax_rate) * batch_qty),0) product_no_tax_profit_rate,
-    case when supplier_type_code='5' or business_type=1 then '1' 
-        when central_purchase_tag='1' then '2'
-        else supplier_type_code end 
-    as purchase_order_type,         -- 采购订单类型1 集采采购 2 基地采购 3 其他采购
+    case
+    when supplier_type_code = '5'
+    or business_type = 1 then '2'
+    when central_purchase_tag = '1' then '1'
+    else '3'
+    end purchase_order_type,         -- 采购订单类型1 集采采购 2 基地采购 3 其他采购
     '2' as goods_shipped_type,           -- 商品出库类型1 A进A出 2工厂加工 3其他
     current_timestamp as update_time,
     channel_type_name,
     channel_type_code,
     supplier_type_code,
     supplier_type_name,
-    transfer_crdential_flag as transfer_crdential_flag , --关联到的工厂采购入库凭证 1 关联 0 未关联
+    transfer_crdential_flag as purchase_crdential_flag , --关联到的工厂采购入库凭证 1 关联 0 未关联
     is_meta_order_flag,
-    substr(sdt,1,6)
+    substr(sdt,1,6) smt
 from csx_analyse_tmp.csx_analyse_tmp_source_puracse_product a
 left join
 (select goods_code,
@@ -983,7 +930,7 @@ select
   -- 原料消耗金额(未税)
   1 as use_ratio,
   -- 原料使用占比
-  1 as produt_ratio,
+  1 as product_ratio,
   -- 原料工单占比
   source_order_no,
   b.receive_dc_code,
@@ -1005,9 +952,10 @@ select
   ) / (a.sale_price / (1 + tax_rate) * a.batch_qty),0) as product_no_tax_profit_rate,
   case
     when supplier_type_code = '5'
-    or business_type = 1 then '1'
-    when central_purchase_tag = '1' then '2'
-    else supplier_type_code
+    or business_type = 1 then '2'
+    when central_purchase_tag = '1' then '1'
+    
+    else '3'
   end as purchase_order_type,
   -- 采购订单类型1 集采采购 2 基地采购 3 其他采购
   '1' as goods_shipped_type,
@@ -1019,7 +967,7 @@ select
   supplier_type_name,
   purchase_crdential_flag,      -- 关联到的采购单号
   1 is_meta_order_flag,            -- 原料是否关联到采购单  
-  substr(sdt, 1, 6)
+  substr(sdt, 1, 6) smt
 from
   csx_analyse_tmp.csx_analyse_tmp_source_batch_sale_01 a
   left join (
@@ -1038,7 +986,8 @@ from
             supplier_type_name,
             sum(a.pur_qty) order_qty,
             sum(a.pur_amt) order_amt
-        FROM csx_analyse_tmp.csx_analyse_tmp_source_order_02 a -- where move_type_code='101A'
+        FROM csx_analyse_tmp.csx_analyse_tmp_source_order_02 a 
+        where move_type_code='101A'
         group by purchase_batch_no,
             a.business_type,
             source_order_no,
@@ -1073,1145 +1022,1296 @@ from
   -- and a.classify_large_code='B02'
 ;
 
-
-
-insert overwrite table csx_analyse.csx_analyse_fr_fina_goods_sale_trace_po_di partition(month)
-
--- drop table csx_analyse_tmp.csx_analyse_tmp_fr_fina_goods_sale_trace_po_di;
--- create table csx_analyse_tmp.csx_analyse_tmp_fr_fina_goods_sale_trace_po_di as
-select *,case
-          when source_order_no is null
-          and goods_shipped_type = '2' then '加工商品未关联'
-          when source_order_no is null
-          and goods_shipped_type = '1' then '采购商品未关联'
-          else '已关联'
-        end type_flag
- from csx_analyse_tmp.csx_analyse_tmp_source_puracse_product_01
-union all 
-select *,
-case
-          when source_order_no is null
-          and goods_shipped_type = '2' then '加工商品未关联'
-          when source_order_no is null
-          and goods_shipped_type = '1' then '采购商品未关联'
-          else '已关联'
-        end type_flag
- from csx_analyse_tmp.csx_analyse_tmp_source_puracse_product_02
- 
-
-;
-
-
-
------------------------------------------分割线------------------------------------------------------
--------------------------------------------------------------------------------------------
--- 取数说明 
-/*
-如果取批次商品需要注意：
-*/
-with tmp_source_product as (
-  select
-    *
-  from
-    csx_analyse_tmp.csx_analyse_tmp_source_puracse_product_02
-  union all
-  select
-    *
-  from
-    csx_analyse_tmp.csx_analyse_tmp_source_puracse_product_01
-),
-tmp_sale as (
-  select
+ -- 根据批次号查找调拔入库凭证 
+ drop table  csx_analyse_tmp.csx_analyse_tmp_source_batch_sale_trans_01;
+ create       table  csx_analyse_tmp.csx_analyse_tmp_source_batch_sale_trans_01 as 
+ select sdt,
+    region_code,
+    region_name,
+    province_code,
     province_name,
-    order_code,
-    goods_code,
-    goods_name,
-    source_order_no,
-    batch_no,
-    classify_middle_name,
-    product_code,
-    product_classify_middle_name,
-    type_flag,
-    supplier_type_name,
-    purchase_crdential_flag,
-    max(sale_amt) sale_amt,
-    max(sale_qty) sale_qty,
-    max(profit) profit,
-    sum(product_sale_amt) as product_sale_amt,
-    sum(product_profit) product_profit
-  from
-    (
-      select
-        province_name,
-        order_code,
-        goods_code,
-        goods_name,
-        sale_amt,
-        sale_qty,
-        profit,
-        classify_middle_name,
-        meta_batch_no,
-        -- 原料批次成本单号
-        product_code,
-        -- 原料商品编码
-        product_name,
-        -- 原料商品名称
-        short_name,
-        product_tax_rate,
-        product_classify_large_code,
-        product_classify_large_name,
-        product_classify_middle_code,
-        product_classify_middle_name,
-        product_classify_small_code,
-        product_classify_small_name,
-        meta_qty,
-        -- 原料消耗数量
-        meta_amt,
-        -- 原料消耗金额
-        meta_amt_no_tax,
-        -- 原料消耗金额(未税)
-        use_ratio,
-        -- 原料使用占比
-        produt_ratio,
-        -- 原料工单占比
-        source_order_no,
-        receive_dc_code,
-        -- 入库DC
-        receive_dc_name,
-        order_qty,
-        order_amt,
-        batch_no,
-        transfer_crdential_no,
-        supplier_code,
-        supplier_name,
-        product_sale_amt,
-        product_sale_amt_no_tax,
-        product_profit,
-        product_profit_no_tax,
-        product_profit_rate,
-        product_no_tax_profit_rate,
-        purchase_order_type,
-        -- 采购订单类型1 集采采购 2 基地采购 3 其他采购
-        goods_shipped_type,
-        -- 商品出库类型1 A进A出 2工厂加工 3其他
-        channel_type_name,
-        channel_type_code,
-        supplier_type_code,
-        supplier_type_name,
-        purchase_crdential_flag,
-        case
-          when source_order_no is null
-          and goods_shipped_type = '2' then '加工商品未关联'
-          when source_order_no is null
-          and goods_shipped_type = '1' then '采购商品未关联'
-          else '已关联'
-        end type_flag
-      from
-        tmp_source_product
-      where 1=1
-        -- purchase_crdential_flag = 0
-      group by
-        province_name,
-         order_code,
-        goods_code,
-        goods_name,
-        sale_amt,
-        sale_qty,
-        profit,
-        batch_no,
-        meta_batch_no,
-        transfer_crdential_no,
-        source_order_no,
-        -- 原料批次成本单号
-        product_code,
-        -- 原料商品编码
-        product_name,
-        -- 原料商品名称
-        short_name,
-        product_tax_rate,
-        product_classify_large_code,
-        product_classify_large_name,
-        product_classify_middle_code,
-        product_classify_middle_name,
-        product_classify_small_code,
-        product_classify_small_name,
-        meta_qty,
-        -- 原料消耗数量
-        meta_amt,
-        -- 原料消耗金额
-        meta_amt_no_tax,
-        -- 原料消耗金额(未税)
-        use_ratio,
-        -- 原料使用占比
-        produt_ratio,
-        -- 原料工单占比
-        source_order_no,
-        receive_dc_code,
-        -- 入库DC
-        receive_dc_name,
-        order_qty,
-        order_amt,
-        use_ratio,
-        supplier_code,
-        supplier_name,
-        product_sale_amt,
-        product_sale_amt_no_tax,
-        product_profit,
-        product_profit_no_tax,
-        product_profit_rate,
-        product_no_tax_profit_rate,
-        purchase_order_type,
-        -- 采购订单类型1 集采采购 2 基地采购 3 其他采购
-        goods_shipped_type,
-        -- 商品出库类型1 A进A出 2工厂加工 3其他
-        channel_type_name,
-        channel_type_code,
-        supplier_type_code,
-        supplier_type_name,
-        purchase_crdential_flag,
-        classify_middle_name,
-        case
-          when source_order_no is null
-          and goods_shipped_type = '2' then '加工商品未关联'
-          when source_order_no is null
-          and goods_shipped_type = '1' then '采购商品未关联'
-          else '已关联'
-        end 
-    ) a
-  group by
-    province_name,
-    order_code,
-    goods_code,
-    goods_name,
-    source_order_no,
-    batch_no,
-    classify_middle_name,
-    product_code,
-    product_classify_middle_name,
-    type_flag,
-    supplier_type_name,
-    purchase_crdential_flag
-) 
-select
-  province_name,
-  purchase_crdential_flag,
-  classify_middle_name,
-  order_code,
-  goods_code,
---   meta_batch_no,
---   product_code,
---   product_classify_middle_name,
-  type_flag,
-  supplier_type_name,
-  sum(product_sale_amt) product_sale_amt,
-  sum(sale_amt) sale_amt
-from
-  tmp_sale b
-where
-  1 = 1 
---   and type_flag !='已关联'  
-  and substr(order_code,1,2)<>'CA'
-    and province_name='重庆'
-    and classify_middle_name='蔬菜'
-    and order_code='OM24102400003565'
-  group by province_name,
-  purchase_crdential_flag,
-  classify_middle_name,
-  order_code,
-  goods_code,
---   meta_batch_no,
---   product_code,
---   product_classify_middle_name,
-  type_flag,
-  supplier_type_name,
-  source_order_no,
-  batch_no
-
--- 查找异常
-with tmp_source_product as (
-  select
-    *
-  from
-    csx_analyse_tmp.csx_analyse_tmp_source_puracse_product_02
-  union all
-  select
-    *
-  from
-    csx_analyse_tmp.csx_analyse_tmp_source_puracse_product_01
-)
-select
-  *
-from
-  tmp_source_product
-where
- province_name ='北京'
---  and classify_middle_name='蔬菜'
---   order_code = 'OM24102400003565'
---   and goods_code = '1630504'
-   and purchase_crdential_flag = 1
---   and source_order_no is null 
-   and (supplier_type_name ='' or supplier_type_name is null )
-  ;
-  
--- 验证数据 已关联的采购单
-
-with tmp_source_product as (
-  select
-    *
-  from
-    csx_analyse_tmp.csx_analyse_tmp_source_puracse_product_02
-  union all
-  select
-    *
-  from
-    csx_analyse_tmp.csx_analyse_tmp_source_puracse_product_01
-    union all 
-  select
-    *
-  from
-    csx_analyse_tmp.csx_analyse_tmp_source_batch_sale_trans_02
-
-	
-)
-,
-tmp_sale as(
-  select
-    province_name,
-    order_code,
-    goods_code,
-    goods_name,
-    sale_amt,
-    sale_qty,
-    profit,
-    classify_middle_name,
-    meta_batch_no,
-    -- 原料批次成本单号
-    product_code,
-    -- 原料商品编码
-    product_name,
-    -- 原料商品名称
-    short_name,
-    product_tax_rate,
-    product_classify_large_code,
-    product_classify_large_name,
-    product_classify_middle_code,
-    product_classify_middle_name,
-    product_classify_small_code,
-    product_classify_small_name,
-    meta_qty,
-    -- 原料消耗数量
-    meta_amt,
-    -- 原料消耗金额
-    meta_amt_no_tax,
-    -- 原料消耗金额(未税)
-    use_ratio,
-    -- 原料使用占比
-    product_ratio,
-    -- 原料工单占比
-    source_order_no,
-    receive_dc_code,
-    -- 入库DC
-    receive_dc_name,
-    order_qty,
-    order_amt,
-    batch_no,
-    transfer_crdential_no,
-    supplier_code,
-    supplier_name,
-    product_sale_amt,
-    product_sale_amt_no_tax,
-    product_profit,
-    product_profit_no_tax,
-    product_profit_rate,
-    product_no_tax_profit_rate,
-    purchase_order_type,
-    -- 采购订单类型1 集采采购 2 基地采购 3 其他采购
-    goods_shipped_type,
-    -- 商品出库类型1 A进A出 2工厂加工 3其他
-    channel_type_name,
-    channel_type_code,
-    supplier_type_code,
-    supplier_type_name,
-    purchase_crdential_flag
-  from
-    tmp_source_product
-  where
-    1 = 1
-    --   and
-    -- purchase_crdential_flag = 0
-  group by
-    province_name,
-    order_code,
-    goods_code,
-    goods_name,
-    sale_amt,
-    sale_qty,
-    profit,
-    batch_no,
-    meta_batch_no,
-    transfer_crdential_no,
-    source_order_no,
-    -- 原料批次成本单号
-    product_code,
-    -- 原料商品编码
-    product_name,
-    -- 原料商品名称
-    short_name,
-    product_tax_rate,
-    product_classify_large_code,
-    product_classify_large_name,
-    product_classify_middle_code,
-    product_classify_middle_name,
-    product_classify_small_code,
-    product_classify_small_name,
-    meta_qty,
-    -- 原料消耗数量
-    meta_amt,
-    -- 原料消耗金额
-    meta_amt_no_tax,
-    -- 原料消耗金额(未税)
-    use_ratio,
-    -- 原料使用占比
-    product_ratio,
-    -- 原料工单占比
-    source_order_no,
-    receive_dc_code,
-    -- 入库DC
-    receive_dc_name,
-    order_qty,
-    order_amt,
-    use_ratio,
-    supplier_code,
-    supplier_name,
-    product_sale_amt,
-    product_sale_amt_no_tax,
-    product_profit,
-    product_profit_no_tax,
-    product_profit_rate,
-    product_no_tax_profit_rate,
-    purchase_order_type,
-    -- 采购订单类型1 集采采购 2 基地采购 3 其他采购
-    goods_shipped_type,
-    -- 商品出库类型1 A进A出 2工厂加工 3其他
-    channel_type_name,
-    channel_type_code,
-    supplier_type_code,
-    supplier_type_name,
-    purchase_crdential_flag,
-    classify_middle_name
-)
-select
-  province_name,
-  -- order_code,
-  -- goods_code,
-  -- goods_name,
-  -- source_order_no,
-  -- batch_no,
-  classify_middle_name,
-  -- product_code,
-  product_classify_middle_name,
-  supplier_type_name,
-  purchase_crdential_flag,
-  -- max(sale_amt) sale_amt,
-  -- max(sale_qty) sale_qty,
---   max(profit) profit,
-  sum(product_sale_amt) as product_sale_amt,
-  sum(product_profit) product_profit
-from
-  tmp_sale a
---   WHERE province_name='北京'
-group by
-  province_name,
-  -- order_code,
-  -- goods_code,
-  -- goods_name,
-  -- source_order_no,
-  -- batch_no,
-  classify_middle_name,
-  -- product_code,
-  product_classify_middle_name,
-  supplier_type_name,
-  purchase_crdential_flag
-
-
--- 整体与采购单关联的采购单
-with tmp_source_product as (
-  select
-    *
-  from
-    csx_analyse_tmp.csx_analyse_tmp_source_puracse_product_02
-  union all
-  select
-    *
-  from
-    csx_analyse_tmp.csx_analyse_tmp_source_puracse_product_01
-  union all
-  select
-    *
-  from
-    csx_analyse_tmp.csx_analyse_tmp_source_batch_sale_trans_02
-)
-,
-tmp_sale as 
-(select
---   order_code,
-  province_name,
-  classify_middle_name,
-  classify_middle_code,
-  sum(sale_amt) as sale_amt02
-from
-  (
-    select
-      sale_month,
-      sale_sdt,
-      region_code,
-      region_name,
-      province_code,
-      province_name,
-      city_group_code,
-      city_group_name,
-      dc_code,
-      dc_name,
-      credential_no,
-      order_code,
-      goods_code,
-      goods_name,
-      tax_rate,
-      division_code,
-      division_name,
-      classify_large_code,
-      classify_large_name,
-      classify_middle_code,
-      classify_middle_name,
-      classify_small_code,
-      classify_small_name,
-      sale_price,
-      sale_cost,
-      sale_amt,
-      sale_qty,
-      profit,
-      sale_amt_no_tax,
-      sale_cost_no_tax,
-      profit_no_tax
-    from
-      tmp_source_product
-    group by
-      sale_month,
-      sale_sdt,
-      region_code,
-      region_name,
-      province_code,
-      province_name,
-      city_group_code,
-      city_group_name,
-      dc_code,
-      dc_name,
-      credential_no,
-      order_code,
-      goods_code,
-      goods_name,
-      tax_rate,
-      division_code,
-      division_name,
-      classify_large_code,
-      classify_large_name,
-      classify_middle_code,
-      classify_middle_name,
-      classify_small_code,
-      classify_small_name,
-      sale_price,
-      sale_cost,
-      sale_amt,
-      sale_qty,
-      profit,
-      sale_amt_no_tax,
-      sale_cost_no_tax,
-      profit_no_tax
-  )a
-  group by classify_middle_name,
-  classify_middle_code,
-  province_name
---   goods_code
-  )
- select a.province_name,b.classify_middle_name,
-    sale_amt01-coalesce(sale_amt02,0) as diff_amt,
-    sale_amt01,
-    sale_amt02 
-from 
-(select classify_middle_code,
-    province_name,
-    sum(sale_amt) sale_amt01
-from   csx_analyse_tmp.csx_analyse_tmp_source_sale_detal 
-group by classify_middle_code,
-    province_name
-)a 
-left join tmp_sale b on a.classify_middle_code=b.classify_middle_code and a.province_name=b.province_name
--- and a.goods_code=b.goods_code
--- where  a.order_code='OM24082400003797'
-
-
-; 
-
-
-with tmp_source_product as (
-  select
-    *
-  from
-    csx_analyse_tmp.csx_analyse_tmp_source_puracse_product_02
-  union all
-  select
-    *
-  from
-    csx_analyse_tmp.csx_analyse_tmp_source_puracse_product_01
-    union all 
-  select
-    *
-  from
-    csx_analyse_tmp.csx_analyse_tmp_source_batch_sale_trans_02
-
-	
-)
-,
-tmp_sale as(
-  select
-    province_name,
-    order_code,
-    goods_code,
-    goods_name,
-    sale_amt,
-    sale_qty,
-    profit,
-    classify_middle_name,
-    meta_batch_no,
-    -- 原料批次成本单号
-    product_code,
-    -- 原料商品编码
-    product_name,
-    -- 原料商品名称
-    short_name,
-    product_tax_rate,
-    product_classify_large_code,
-    product_classify_large_name,
-    product_classify_middle_code,
-    product_classify_middle_name,
-    product_classify_small_code,
-    product_classify_small_name,
-    meta_qty,
-    -- 原料消耗数量
-    meta_amt,
-    -- 原料消耗金额
-    meta_amt_no_tax,
-    -- 原料消耗金额(未税)
-    use_ratio,
-    -- 原料使用占比
-    product_ratio,
-    -- 原料工单占比
-    source_order_no,
-    receive_dc_code,
-    -- 入库DC
-    receive_dc_name,
-    order_qty,
-    order_amt,
-    batch_no,
-    transfer_crdential_no,
-    supplier_code,
-    supplier_name,
-    product_sale_amt,
-    product_sale_amt_no_tax,
-    product_profit,
-    product_profit_no_tax,
-    product_profit_rate,
-    product_no_tax_profit_rate,
-    purchase_order_type,
-    -- 采购订单类型1 集采采购 2 基地采购 3 其他采购
-    goods_shipped_type,
-    -- 商品出库类型1 A进A出 2工厂加工 3其他
-    channel_type_name,
-    channel_type_code,
-    supplier_type_code,
-    supplier_type_name,
-    purchase_crdential_flag
-  from
-    tmp_source_product
-  where
-    1 = 1
-    --   and
-    -- purchase_crdential_flag = 0
-  group by
-    province_name,
-    order_code,
-    goods_code,
-    goods_name,
-    sale_amt,
-    sale_qty,
-    profit,
-    batch_no,
-    meta_batch_no,
-    transfer_crdential_no,
-    source_order_no,
-    -- 原料批次成本单号
-    product_code,
-    -- 原料商品编码
-    product_name,
-    -- 原料商品名称
-    short_name,
-    product_tax_rate,
-    product_classify_large_code,
-    product_classify_large_name,
-    product_classify_middle_code,
-    product_classify_middle_name,
-    product_classify_small_code,
-    product_classify_small_name,
-    meta_qty,
-    -- 原料消耗数量
-    meta_amt,
-    -- 原料消耗金额
-    meta_amt_no_tax,
-    -- 原料消耗金额(未税)
-    use_ratio,
-    -- 原料使用占比
-    product_ratio,
-    -- 原料工单占比
-    source_order_no,
-    receive_dc_code,
-    -- 入库DC
-    receive_dc_name,
-    order_qty,
-    order_amt,
-    use_ratio,
-    supplier_code,
-    supplier_name,
-    product_sale_amt,
-    product_sale_amt_no_tax,
-    product_profit,
-    product_profit_no_tax,
-    product_profit_rate,
-    product_no_tax_profit_rate,
-    purchase_order_type,
-    -- 采购订单类型1 集采采购 2 基地采购 3 其他采购
-    goods_shipped_type,
-    -- 商品出库类型1 A进A出 2工厂加工 3其他
-    channel_type_name,
-    channel_type_code,
-    supplier_type_code,
-    supplier_type_name,
-    purchase_crdential_flag,
-    classify_middle_name
-)
-select
-  province_name,
-  -- order_code,
-  -- goods_code,
-  -- goods_name,
-  -- source_order_no,
-  -- batch_no,
-  classify_middle_name,
-  -- product_code,
-  product_classify_middle_name,
-  supplier_type_name,
-  purchase_crdential_flag,
-  -- max(sale_amt) sale_amt,
-  -- max(sale_qty) sale_qty,
---   max(profit) profit,
-  sum(product_sale_amt) as product_sale_amt,
-  sum(product_profit) product_profit
-from
-  tmp_sale a
---   WHERE province_name='北京'
-group by
-  province_name,
-  -- order_code,
-  -- goods_code,
-  -- goods_name,
-  -- source_order_no,
-  -- batch_no,
-  classify_middle_name,
-  -- product_code,
-  product_classify_middle_name,
-  supplier_type_name,
-  purchase_crdential_flag
-;
-
-
-  with tmp_source_product as (
-  select
-    *
-  from
-    csx_analyse_tmp.csx_analyse_tmp_source_puracse_product_02
-  union all
-  select
-    *
-  from
-    csx_analyse_tmp.csx_analyse_tmp_source_puracse_product_01
-  union all
-  select
-    *
-  from
-    csx_analyse_tmp.csx_analyse_tmp_source_batch_sale_trans_02
-)
-,  
-tmp_sale as 
-(select
-  order_code,
-  province_name,
-  goods_code,
-  classify_middle_name,
-  classify_middle_code,
-  sum(sale_amt) as sale_amt02
-from
-  (
-    select
-      sale_month,
-      sale_sdt,
-      region_code,
-      region_name,
-      province_code,
-      province_name,
-      city_group_code,
-      city_group_name,
-      dc_code,
-      dc_name,
-      credential_no,
-      order_code,
-      goods_code,
-      goods_name,
-      tax_rate,
-      division_code,
-      division_name,
-      classify_large_code,
-      classify_large_name,
-      classify_middle_code,
-      classify_middle_name,
-      classify_small_code,
-      classify_small_name,
-      sale_price,
-      sale_cost,
-      sale_amt,
-      sale_qty,
-      profit,
-      sale_amt_no_tax,
-      sale_cost_no_tax,
-      profit_no_tax
-    from
-     tmp_source_product
-    --  where month='202411'
-    --  and province_name='江西'
-     where classify_middle_name='蔬菜'
-    group by
-      sale_month,
-      sale_sdt,
-      region_code,
-      region_name,
-      province_code,
-      province_name,
-      city_group_code,
-      city_group_name,
-      dc_code,
-      dc_name,
-      credential_no,
-      order_code,
-      goods_code,
-      goods_name,
-      tax_rate,
-      division_code,
-      division_name,
-      classify_large_code,
-      classify_large_name,
-      classify_middle_code,
-      classify_middle_name,
-      classify_small_code,
-      classify_small_name,
-      sale_price,
-      sale_cost,
-      sale_amt,
-      sale_qty,
-      profit,
-      sale_amt_no_tax,
-      sale_cost_no_tax,
-      profit_no_tax
-  )a
-  group by classify_middle_name,
-  classify_middle_code,
-  province_name,
-  order_code,
-  goods_code
-  )
- select a.province_name,b.classify_middle_name,a.order_code,dc_code,a.classify_middle_code,
-    a.goods_code,
-    a.goods_name,
-    sale_amt01-coalesce(sale_amt02,0) as diff_amt,
-    sale_amt01,
-    sale_amt02 ,
-    credential_no
-from 
-(select a.order_code,
-    a.goods_code,
-    goods_name,
-    dc_code,
-    classify_middle_code,
-    province_name,
-    credential_no,
-    sum(sale_amt) sale_amt01
-from   csx_analyse_tmp.csx_analyse_tmp_source_sale_detal  a 
-    where classify_middle_code='B0202'
-    AND province_name='河南'
-    and substr(order_code,1,2)<>'CA'
-group by classify_middle_code,
-    province_name,
-     order_code,
-     dc_code,
-    goods_code,
-    goods_name,
-    credential_no
-)a 
-left join tmp_sale b on a.classify_middle_code=b.classify_middle_code
-and a.province_name=b.province_name
-and a.order_code=b.order_code
-and a.goods_code=b.goods_code
--- where  a.order_code='OM24103100004588'
-where sale_amt01-coalesce(sale_amt02,0)<>0
--------------------------------------------------------------
--- 集采工厂入库商品 不包含蔬果
-drop table  csx_analyse_tmp.csx_analyse_tmp_jd_puracse_product_03;
-create temporary   table csx_analyse_tmp.csx_analyse_tmp_jd_puracse_product_03 as 
-select 
-    substr(sdt,1,6) sale_month,
-    sdt as sale_sdt,
-    a.region_code,
-    a.region_name,
-    a.province_code,
-    a.province_name,
-	a.city_group_code,
-	a.city_group_name,
-    dc_code,
-    d.shop_name as  dc_name,
+	  city_group_code,
+	  city_group_name,
+    dc_code,           -- 销售出库DC
+    receive_dc_code,   -- 入库DC
     a.credential_no,
     order_code,
+    channel_name,
+    order_channel_code,
     a.goods_code,
     a.goods_name,
-    tax_rate,                       -- 商品税率
     division_code,
-    division_name,
-    c.classify_large_code,
-    c.classify_large_name,
-    c.classify_middle_code,
-    c.classify_middle_name,
-    c.classify_small_code,
-    c.classify_small_name,
-    sale_price,
-    a.sale_cost,
-    a.sale_amt,
-    a.sale_qty,
-    a.profit,
-    sale_amt_no_tax ,
-    sale_cost_no_tax , 
-    profit_no_tax ,   
-    a.batch_no, 
-    batch_price,
-    batch_qty   ,
-    batch_amt   ,
-    batch_amt_no_tax,
-    (a.sale_price* batch_qty ) as batch_sale_amt,
-    (a.sale_price/(1+tax_rate)*batch_qty ) as batch_sale_amt_no_tax,  
-    (a.sale_price* batch_qty )- batch_amt as batch_profit,
-    (a.sale_price/(1+tax_rate)*batch_qty )-batch_amt_no_tax as batch_profit_no_tax,
-    (a.sale_price* batch_qty - batch_amt)/(a.sale_price* batch_qty ) as batch_profit_rate,
-    (a.sale_price/(1+tax_rate)*batch_qty -batch_amt_no_tax)/(a.sale_price/(1+tax_rate)*batch_qty ) as batch_profit_rate_no_tax,
-    a.transfer_crdential_no,    -- 成品凭证单号
-    a.transfer_price,
-    a.transfer_qty,
-    a.transfer_amt,
-    a.transfer_amt_no_tax ,  
-    meta_batch_no,              -- 原料批次成本单号           
-    product_code,               -- 原料商品编码
-    product_name,               -- 原料商品名称
-    short_name,
-    product_tax_rate,           -- 原料商品税率
-    product_classify_large_code	    ,
-    product_classify_large_name	    ,
-    product_classify_middle_code    ,
-    product_classify_middle_name    ,
-    product_classify_small_code	    ,
-    product_classify_small_name	    ,
-    meta_qty,                   -- 原料消耗数量
-    meta_amt,                   -- 原料消耗金额
-    meta_amt_no_tax,            -- 原料消耗金额(未税)
-    use_ratio,                  -- 原料使用占比
-    product_ratio,              -- 原料工单占比
-    source_order_no, 
-    receive_dc_code,            -- 入库DC
-    f.shop_name as receive_dc_name,
-    order_qty,
-    order_amt,
-    supplier_code,
-    supplier_name,
-    (a.sale_price* batch_qty ) * a.product_ratio as product_sale_amt,
-    (a.sale_price/(1+tax_rate) * batch_qty ) * a.product_ratio as product_sale_amt_no_tax,
-    batch_amt * product_ratio as product_cost_amt,
-    a.batch_amt_no_tax * product_ratio as product_cost_amt_no_tax,
-    (sale_price*batch_qty*product_ratio-a.batch_amt * a.product_ratio) product_profit,
-    (a.sale_price/(1+tax_rate)*batch_qty*product_ratio-a.batch_amt_no_tax * a.product_ratio) product_profit_no_tax,
-    (sale_price*batch_qty*product_ratio-a.batch_amt * a.product_ratio)/((a.sale_price* batch_qty ) * a.product_ratio) as product_profit_rate,
-    (a.sale_price/(1+tax_rate)*batch_qty*product_ratio-a.batch_amt_no_tax * a.product_ratio)/(a.sale_price/(1+tax_rate) * batch_qty) product_no_tax_profit_rate,
-    '1' as purchase_order_type,         -- 采购订单类型1 集采采购 2 基地采购 3 其他采购
-    '2' as goods_shipped_type,           -- 商品出库类型1 A进A出 2工厂加工 3其他
-    current_timestamp as update_time,
-    substr(sdt,1,6)
-from csx_analyse_tmp.csx_analyse_tmp_jd_puracse_product a
-join
-(select goods_code,
-    tax_rate/100 tax_rate,
     classify_large_code,
-    classify_large_name,
     classify_middle_code,
-    classify_middle_name,
     classify_small_code,
-    classify_small_name,
-    division_name
- from csx_analyse_tmp.csx_analyse_tmp_jd_goods_short) c on a.goods_code=c.goods_code
-join 
- csx_analyse_tmp.csx_analyse_tmp_jd_dc_new d on a.dc_code=d.shop_code
-join csx_analyse_tmp.csx_analyse_tmp_jd_dc_new f on a.receive_dc_code=f.shop_code
-where central_purchase_tag =1
-and   classify_large_code !='B02';
-
-
--- 采购集采销售 不包含蔬果
-drop table csx_analyse_tmp.csx_analyse_tmp_jd_puracse_product_04;
- create  temporary   table csx_analyse_tmp.csx_analyse_tmp_jd_puracse_product_04 as 
-select 
-     substr(sdt,1,6) sale_month,
-    sdt as sale_sdt,
-    a.region_code,
-    a.region_name,
-    a.province_code,
-    a.province_name,
-	a.city_group_code,
-	a.city_group_name,
-    dc_code,
-    d.shop_name as dc_name,
-    a.credential_no,
-    order_code,
-    a.goods_code,
-    a.goods_name,
-    tax_rate,
-    division_code,
-    c.division_name,
-    c.classify_large_code,
-    c.classify_large_name,
-    c.classify_middle_code,
-    c.classify_middle_name,
-    c.classify_small_code,
-    c.classify_small_name,
     sale_price,
     a.sale_cost,
     a.sale_amt,
     a.sale_qty,
-    a.profit,
     sale_amt_no_tax ,
     sale_cost_no_tax , 
     profit_no_tax ,
-    a.batch_no,
-    batch_price,
+    a.profit,
     batch_qty,
     batch_amt,
     batch_amt_no_tax,
-    (a.sale_price* batch_qty ) as batch_sale_amt,
-    (a.sale_price/(1+tax_rate)*batch_qty ) as batch_sale_amt_no_tax,  
-    (a.sale_price* batch_qty )- batch_amt as batch_profit,
-    (a.sale_price/(1+tax_rate)*batch_qty )-batch_amt_no_tax as batch_profit_no_tax,
-    (a.sale_price* batch_qty - batch_amt)/(a.sale_price* batch_qty ) as batch_profit_rate,
-    (a.sale_price/(1+tax_rate)*batch_qty -batch_amt_no_tax)/(a.sale_price/(1+tax_rate)*batch_qty ) as batch_profit_rate_no_tax,
-    '' as transfer_crdential_no,    -- 成品凭证单号
-    0 as transfer_price,
-    0 as transfer_qty,
-    0 as transfer_amt,
-    0 as transfer_amt_no_tax ,  
-    batch_no as meta_batch_no,              -- 原料批次成本单号           
-    a.goods_code as product_code,               -- 原料商品编码
-    a.goods_name as product_name,               -- 原料商品名称
-    short_name,
-    tax_rate as product_tax_rate,
-    c.classify_large_code as product_classify_large_code	    ,
-    c.classify_large_name as product_classify_large_name	    ,
-    c.classify_middle_code as product_classify_middle_code    ,
-    c.classify_middle_name as product_classify_middle_name    ,
-    c.classify_small_code as product_classify_small_code	    ,
-    c.classify_small_name as product_classify_small_name	    ,
-    batch_qty as meta_qty,                   -- 原料消耗数量
-    batch_amt as meta_amt,                   -- 原料消耗金额
-    batch_amt_no_tax as meta_amt_no_tax,            -- 原料消耗金额(未税)
-    1 as use_ratio,                  -- 原料使用占比
-    1 as produt_ratio,               -- 原料工单占比
-    source_order_no,
-    b.receive_dc_code, -- 入库DC
-    f.shop_name receive_dc_name,
-    order_qty,
-    order_amt,
-    supplier_code,
-    supplier_name,
-    a.sale_price*batch_qty as product_sale_amt,
-   ( a.sale_price/(1+tax_rate))*a.batch_qty as product_sale_amt_no_tax,
-   a.batch_amt as product_cost_amt,
-   a.batch_amt_no_tax as product_cost_amt_no_tax,
-   a.sale_price*batch_qty-batch_amt as product_profit,
-   ( a.sale_price/(1+tax_rate))*a.batch_qty-batch_amt_no_tax as product_profit_no_tax,
-   (a.sale_price*batch_qty-batch_amt)/(a.sale_price*batch_qty) as product_profit_rate,
-   ( (a.sale_price/(1+tax_rate))*a.batch_qty-batch_amt_no_tax)/( a.sale_price/(1+tax_rate)*a.batch_qty) as product_no_tax_profit_rate,
-    '1' as purchase_order_type,         -- 采购订单类型1 集采采购 2 基地采购 3 其他采购
-    '1' as goods_shipped_type,           -- 商品出库类型1 A进A出 2工厂加工 3其他
-    current_timestamp() update_time,
-    substr(sdt,1,6)
-from csx_analyse_tmp.csx_analyse_tmp_jd_batch_sale_01 a
-left join 
-(SELECT  purchase_batch_no,
+    batch_price,
+    purchase_crdential_no,
+    a.batch_no,
+    b.qty as pur_qty,
+    b.amt as pur_amt,
+    b.amt_no_tax as pur_amt_no_tax,
+    b.price as pur_price,
+    b.wms_batch_no,
+    b.wms_order_no,
+    if(b.purchase_crdential_no is not null ,1,0) as purchase_crdential_flag     -- 关联采购凭证标识
+from  csx_analyse_tmp.csx_analyse_tmp_source_batch_sale a 
+ left join
+(
+select credential_no purchase_crdential_no,
+    batch_no purchase_batch_no,
+    goods_code,
+    dc_code receive_dc_code,
+    link_wms_batch_no as wms_batch_no, 
+    link_wms_order_no as wms_order_no,
+    move_type_code,
+    in_out_type,
+    qty,
+    amt,
+    price,
+    amt_no_tax
+ from  csx_dwd.csx_dwd_cas_accounting_stock_log_item_di a 
+    where sdt>='${sdate}'
+  		and sdt<='${edate}'
+        and move_type_code ='102A'
+        and in_or_out=0
+        and in_out_type='PURCHASE_IN'
+        and link_wms_order_no like 'IN%'
+  ) b on a.batch_no=b.purchase_batch_no and a.goods_code=b.goods_code
+  ;
+
+
+
+
+-- 调拔单关联入库采购单
+drop table csx_analyse_tmp.csx_analyse_tmp_source_batch_sale_trans_02;
+create table csx_analyse_tmp.csx_analyse_tmp_source_batch_sale_trans_02 as 
+  select substr(sdt, 1, 6) sale_month,
+  sdt as sale_sdt,
+  a.region_code,
+  a.region_name,
+  a.province_code,
+  a.province_name,
+  a.city_group_code,
+  a.city_group_name,
+  dc_code,
+  d.shop_name as dc_name,
+  a.credential_no,
+  order_code,
+  a.goods_code,
+  a.goods_name,
+  tax_rate,
+  division_code,
+  c.division_name,
+  c.classify_large_code,
+  c.classify_large_name,
+  c.classify_middle_code,
+  c.classify_middle_name,
+  c.classify_small_code,
+  c.classify_small_name,
+  sale_price,
+  a.sale_cost,
+  a.sale_amt,
+  a.sale_qty,
+  a.profit,
+  sale_amt_no_tax,
+  sale_cost_no_tax,
+  profit_no_tax,
+  a.batch_no,
+  batch_price,
+  batch_qty,
+  batch_amt,
+  batch_amt_no_tax,
+  if(b.purchase_batch_no is not null,(a.sale_price * batch_qty),0) as batch_sale_amt,
+  if(b.purchase_batch_no is not null,(a.sale_price / (1 + tax_rate) * batch_qty),0) as batch_sale_amt_no_tax,
+  if(b.purchase_batch_no is not null,(a.sale_price * batch_qty) - batch_amt,0) as batch_profit,
+  if(b.purchase_batch_no is not null,(a.sale_price / (1 + tax_rate) * batch_qty) - batch_amt_no_tax,0) as batch_profit_no_tax,
+  if(b.purchase_batch_no is not null,(a.sale_price * batch_qty - batch_amt) / (a.sale_price * batch_qty),0) as batch_profit_rate,
+  if(b.purchase_batch_no is not null,( a.sale_price / (1 + tax_rate) * batch_qty - batch_amt_no_tax ) / (a.sale_price / (1 + tax_rate) * batch_qty) ,0) as batch_profit_rate_no_tax,  '' as transfer_crdential_no,
+  -- 成品凭证单号
+  0 as transfer_price,
+  0 as transfer_qty,
+  0 as transfer_amt,
+  0 as transfer_amt_no_tax,
+  batch_no as meta_batch_no,
+  -- 原料批次成本单号
+  a.goods_code as product_code,
+  -- 原料商品编码
+  a.goods_name as product_name,
+  -- 原料商品名称
+  short_name,
+  tax_rate as product_tax_rate,
+  c.classify_large_code as product_classify_large_code,
+  c.classify_large_name as product_classify_large_name,
+  c.classify_middle_code as product_classify_middle_code,
+  c.classify_middle_name as product_classify_middle_name,
+  c.classify_small_code as product_classify_small_code,
+  c.classify_small_name as product_classify_small_name,
+  if(purchase_crdential_flag=1,batch_qty,0) as meta_qty,
+  -- 原料消耗数量
+  if(purchase_crdential_flag=1,batch_amt,0) as meta_amt,
+  -- 原料消耗金额
+  if(purchase_crdential_flag=1,batch_amt_no_tax,0) as meta_amt_no_tax,
+  -- 原料消耗金额(未税)
+  1 as use_ratio,
+  -- 原料使用占比
+  1 as product_ratio,
+  -- 原料工单占比
+  b.source_order_no,
+  b.receive_dc_code,
+  -- 入库DC
+  f.shop_name receive_dc_name,
+  order_qty,
+  order_amt,
+  supplier_code,
+  supplier_name,
+  if(b.purchase_batch_no is not null, a.sale_price * batch_qty,0) as product_sale_amt,
+  if(b.purchase_batch_no is not null, (a.sale_price / (1 + tax_rate)) * a.batch_qty,0) as product_sale_amt_no_tax,
+  if(b.purchase_batch_no is not null,a.batch_amt,0) as product_cost_amt,
+  if(b.purchase_batch_no is not null,a.batch_amt_no_tax,0) as product_cost_amt_no_tax,
+  if(b.purchase_batch_no is not null,a.sale_price * batch_qty - batch_amt ,0) as product_profit,
+  if(b.purchase_batch_no is not null,(a.sale_price / (1 + tax_rate)) * a.batch_qty - batch_amt_no_tax ,0) as product_profit_no_tax,
+  if(b.purchase_batch_no is not null,(a.sale_price * batch_qty - batch_amt) / (a.sale_price * batch_qty),0) as product_profit_rate,
+  if(b.purchase_batch_no is not null,(
+    (a.sale_price / (1 + tax_rate)) * a.batch_qty - batch_amt_no_tax
+  ) / (a.sale_price / (1 + tax_rate) * a.batch_qty),0) as product_no_tax_profit_rate,
+  case
+    when supplier_type_code = '5' or business_type = 1 then '2'
+    when central_purchase_tag = '1' then '1'    
+    else '3'
+  end as purchase_order_type,
+  -- 采购订单类型1 集采采购 2 基地采购 3 其他采购
+  '1' as goods_shipped_type,
+  -- 商品出库类型1 A进A出 2工厂加工 3其他
+  current_timestamp() update_time,
+  channel_type_name,
+  channel_type_code,
+  supplier_type_code,
+  supplier_type_name,
+  if(b.purchase_batch_no is not null ,1,0)  purchase_crdential_flag,      -- 关联到的采购单号
+  1 is_meta_order_flag,            -- 原料是否关联到采购单  
+  substr(sdt, 1, 6) smt
+from  csx_analyse_tmp.csx_analyse_tmp_source_batch_sale_trans_01 a 
+  left join 
+(SELECT purchase_batch_no,
+        wms_batch_no,
+        wms_order_no,
          a.business_type,
+         central_purchase_tag,
          source_order_no,
-         goods_code,
+         receive_dc_code,
          supplier_code,
          supplier_name,
-         receive_dc_code,
-         central_purchase_tag,
+         move_type_code,
+         goods_code,
+         channel_type_name,
+         channel_type_code,
+         supplier_type_code,
+         supplier_type_name,
          sum(a.pur_qty) order_qty,
          sum(a.pur_amt) order_amt
-      FROM    csx_analyse_tmp.csx_analyse_tmp_jd_order_02 a
-     -- where move_type_code='101A'
-      group by purchase_batch_no,
+     FROM csx_analyse_tmp.csx_analyse_tmp_source_order_02 a
+        where move_type_code='102A'
+     group by purchase_batch_no,
+         a.business_type,
+         source_order_no,
+         receive_dc_code,
+         supplier_code,
+         central_purchase_tag,
+         move_type_code,
+         supplier_name,
+         channel_type_name,
+         channel_type_code,
+         supplier_type_code,
+         supplier_type_name,
+         goods_code,
+         wms_batch_no,
+         wms_order_no
+     ) b ON a.wms_batch_no = b.wms_batch_no and a.wms_order_no=b.wms_order_no
+         and a.goods_code=b.goods_code
+    left join (
+    select
+      goods_code,
+      tax_rate / 100 tax_rate,
+      short_name,
+      classify_large_code,
+      classify_large_name,
+      classify_middle_code,
+      classify_middle_name,
+      classify_small_code,
+      classify_small_name,
+      division_name
+    from
+      csx_analyse_tmp.csx_analyse_tmp_goods_short
+  ) c on a.goods_code = c.goods_code
+  left join csx_analyse_tmp.csx_analyse_tmp_dc_new d on a.dc_code = d.shop_code
+  left join csx_analyse_tmp.csx_analyse_tmp_dc_new f on b.receive_dc_code = f.shop_code
+--  where b.purchase_batch_no is not null
+where purchase_crdential_flag=1
+
+;  
+
+
+
+ drop table csx_analyse_tmp.csx_analyse_tmp_wms_change_order_detail; 
+ create table  csx_analyse_tmp.csx_analyse_tmp_wms_change_order_detail as 
+    select id,
+        order_code,
+        a.dc_code,
+        source_goods_code,
+        source_goods_qty,
+        -- b.source_order_no,
+        b.batch_no as source_batch_no,
+        b.credential_no as source_credential_no,
+        -- b.move_type_code as ,
+        b.qty as source_qty,
+        b.amt as source_amt,
+        b.price as source_price,
+        target_goods_code,
+        target_goods_qty,
+        -- c.source_order_no as targer_source_order_code,
+        c.batch_no as target_batch_no,
+        c.credential_no as target_credential_no,
+        c.move_type_code ,
+        c.qty as target_qty,
+        c.amt as target_amt,
+        c.price as target_price
+    from 
+    
+    (select id,order_code,
+        dc_code,
+        change_type,        -- 转换类型 1-子转母 2-母转子 3-等量转换
+        source_goods_code,
+        source_goods_qty,
+        target_goods_code,
+        target_goods_qty
+    from    csx_dwd.csx_dwd_wms_product_change_order_detail_di  
+    where sdt>='${sdate}'
+        and sdt<='${edate}'
+        and change_type=3  
+    ) a 
+    left join 
+    (select credential_no,
+    batch_no,
+    goods_code,
+    dc_code,
+    -- source_order_no,
+    link_wms_batch_no wms_batch_no,
+    link_wms_order_no wms_order_no,
+    move_type_code,
+    qty,
+    amt,
+    price
+ from   csx_dwd.csx_dwd_cas_accounting_stock_log_item_di a 
+    where sdt>='${sdate}'
+        and sdt<='${edate}'
+        and move_type_code ='202A'
+        -- and direction_flag ='+'
+        and in_out_type='CODE_TRANS'
+) b on  a.source_goods_code=b.goods_code
+    and a.order_code=b.wms_order_no 
+      left join 
+    (select credential_no,
+         batch_no,
+         goods_code,
+         dc_code,
+         -- source_order_no,
+         link_wms_batch_no wms_batch_no,
+         link_wms_order_no wms_order_no,
+         move_type_code,
+         qty,
+         amt,
+         price
+ from   csx_dwd.csx_dwd_cas_accounting_stock_log_item_di a 
+    where sdt>='${sdate}'
+        and sdt<='${edate}'
+        and move_type_code ='202A'
+        -- and direction_flag ='+'
+        and in_out_type='CODE_TRANS'
+) c on  a.target_goods_code=c.goods_code
+    and a.order_code=c.wms_order_no 
+where b.batch_no is not null or c.batch_no is not null 
+  
+  ;
+  
+
+  -- 根据成品批次号查找转码凭证号 
+
+drop table   csx_analyse_tmp.csx_analyse_tmp_wms_change_order_detail_sale_01;
+create  table csx_analyse_tmp.csx_analyse_tmp_wms_change_order_detail_sale_01 as 
+with 
+tmp_source_batch as 
+(select sdt,
+    region_code,
+    region_name,
+    province_code,
+    province_name,
+	city_group_code,
+	city_group_name,
+    dc_code,
+    a.credential_no,
+    a.order_code,
+    channel_name,
+    order_channel_code,
+    a.goods_code,
+    a.goods_name,
+    division_code,
+    classify_large_code,
+    classify_middle_code,
+    classify_small_code,
+    sale_price,
+    a.sale_cost,
+    a.sale_amt,
+    a.sale_qty,
+    sale_amt_no_tax ,
+    sale_cost_no_tax , 
+    profit_no_tax ,
+    a.profit,
+    sum(batch_qty) as batch_qty,
+    sum(batch_amt) as batch_amt,
+    sum(batch_amt_no_tax) batch_amt_no_tax,
+    sum(batch_price) batch_price,
+    a.batch_no
+     
+from csx_analyse_tmp.csx_analyse_tmp_source_batch_sale a 
+group by 
+    sdt,
+    region_code,
+    region_name,
+    province_code,
+    province_name,
+	city_group_code,
+	city_group_name,
+    dc_code,
+    a.credential_no,
+    a.order_code,
+    channel_name,
+    order_channel_code,
+    a.goods_code,
+    a.goods_name,
+    division_code,
+    classify_large_code,
+    classify_middle_code,
+    classify_small_code,
+    sale_price,
+    a.sale_cost,
+    a.sale_amt,
+    a.sale_qty,
+    sale_amt_no_tax ,
+    sale_cost_no_tax , 
+    profit_no_tax ,
+    a.profit,
+    batch_no
+)
+select   sdt,
+    region_code,
+    region_name,
+    province_code,
+    province_name,
+	city_group_code,
+	city_group_name,
+    dc_code,
+    a.credential_no,
+    a.order_code,
+    channel_name,
+    order_channel_code,
+    a.goods_code,
+    a.goods_name,
+    division_code,
+    classify_large_code,
+    classify_middle_code,
+    classify_small_code,
+    sale_price,
+    a.sale_cost,
+    a.sale_amt,
+    a.sale_qty,
+    sale_amt_no_tax ,
+    sale_cost_no_tax , 
+    profit_no_tax ,
+    a.profit,
+    (batch_qty) as batch_qty,
+    (batch_amt) as batch_amt,
+    (batch_amt_no_tax) batch_amt_no_tax,
+    (batch_price) batch_price,
+    a.batch_no,
+    transfer_crdential_no,
+    transfer_qty,
+    transfer_amt,
+    transfer_price,
+    transfer_amt_no_tax ,
+    move_type_code,
+    in_out_type,
+    b.in_or_out,
+    if(b.transfer_crdential_no is not null ,1,0) as transfer_crdential_flag     -- 关联领料凭证标识
+ from tmp_source_batch as a 
+ left join
+(SELECT credential_no as transfer_crdential_no,
+       batch_no as transfer_batch_no,
+       move_type_code,
+       in_out_type,
+       goods_code,
+       in_or_out,
+       sum(qty) as   transfer_qty,
+       sum(amt) as   transfer_amt,
+       sum(amt_no_tax)  as transfer_amt_no_tax,
+       sum(amt)/sum(qty)  as transfer_price
+    --   row_number()over(partition by credential_no,batch_no,goods_code order by create_time asc ) rn 
+FROM  csx_dwd.csx_dwd_cas_accounting_stock_log_item_di
+WHERE sdt>='${sdate}'
+      and sdt<='${edate}'
+  AND in_out_type='CODE_TRANS'
+    group by  credential_no,
+       batch_no ,
+       move_type_code,
+       in_out_type,
+       goods_code,
+       in_or_out
+) b on a.batch_no=b.transfer_batch_no and a.goods_code=b.goods_code
+where  1=1
+-- and rn =1 
+ and b.transfer_batch_no is not null 
+-- and  order_code='OM24121100004963'
+ ;
+
+
+-- 查找转码单采购单号
+ 
+ drop table csx_analyse_tmp.csx_analyse_tmp_change_order_sale_detail;;
+
+create table csx_analyse_tmp.csx_analyse_tmp_change_order_sale_detail as 
+-- 转码原品
+with tmp_change_order as 
+(select a.*,b. source_goods_code,
+        source_goods_qty,
+        source_batch_no,
+        source_credential_no,
+        -- b.move_type_code as ,
+        source_qty,
+        source_amt,
+        source_price,
+        zm_order_code,
+        zm_dc_code
+        
+from csx_analyse_tmp.csx_analyse_tmp_wms_change_order_detail_sale_01 a 
+left join 
+(select source_goods_code,
+        source_goods_qty,
+        source_batch_no,
+        source_credential_no,
+        -- b.move_type_code as ,
+        sum(source_qty) as source_qty,
+        sum(source_amt) as source_amt,
+         sum(source_amt)/sum(source_qty ) as source_price,
+        order_code as zm_order_code,
+        dc_code as zm_dc_code
+    from csx_analyse_tmp.csx_analyse_tmp_wms_change_order_detail 
+    
+    group by source_goods_code,
+        source_goods_qty,
+        source_batch_no,
+        source_credential_no,
+        -- b.move_type_code as ,
+        
+        order_code,
+        dc_code
+    )
+    
+    b on a.goods_code=b.source_goods_code and a.transfer_crdential_no=b.source_credential_no 
+ where  in_or_out=1
+ )
+,
+tmp_change_order_01 as 
+(select substr(sdt, 1, 6) sale_month,
+  sdt as sale_sdt,
+  a.region_code,
+  a.region_name,
+  a.province_code,
+  a.province_name,
+  a.city_group_code,
+  a.city_group_name,
+  dc_code,
+  d.shop_name as dc_name,
+  a.credential_no,
+  order_code,
+  a.goods_code,
+  a.goods_name,
+  tax_rate,
+  division_code,
+  c.division_name,
+  c.classify_large_code,
+  c.classify_large_name,
+  c.classify_middle_code,
+  c.classify_middle_name,
+  c.classify_small_code,
+  c.classify_small_name,
+  sale_price,
+  a.sale_cost,
+  a.sale_amt,
+  a.sale_qty,
+  a.profit,
+  sale_amt_no_tax,
+  sale_cost_no_tax,
+  profit_no_tax,
+  a.batch_no,
+  batch_price,
+  batch_qty,
+  batch_amt,
+  batch_amt_no_tax,
+  if(b.purchase_batch_no is not null,(a.sale_price * batch_qty),0) as batch_sale_amt,
+  if(b.purchase_batch_no is not null,(a.sale_price / (1 + tax_rate) * batch_qty),0) as batch_sale_amt_no_tax,
+  if(b.purchase_batch_no is not null,(a.sale_price * batch_qty) - batch_amt,0) as batch_profit,
+  if(b.purchase_batch_no is not null,(a.sale_price / (1 + tax_rate) * batch_qty) - batch_amt_no_tax,0) as batch_profit_no_tax,
+  if(b.purchase_batch_no is not null,(a.sale_price * batch_qty - batch_amt) / (a.sale_price * batch_qty),0) as batch_profit_rate,
+  if(b.purchase_batch_no is not null,( a.sale_price / (1 + tax_rate) * batch_qty - batch_amt_no_tax ) / (a.sale_price / (1 + tax_rate) * batch_qty) ,0) as batch_profit_rate_no_tax,  '' as transfer_crdential_no,
+  -- 成品凭证单号
+  0 as transfer_price,
+  0 as transfer_qty,
+  0 as transfer_amt,
+  0 as transfer_amt_no_tax,
+  batch_no as meta_batch_no,
+  -- 原料批次成本单号
+  a.goods_code as product_code,
+  -- 原料商品编码
+  a.goods_name as product_name,
+  -- 原料商品名称
+  short_name,
+  tax_rate as product_tax_rate,
+  c.classify_large_code as product_classify_large_code,
+  c.classify_large_name as product_classify_large_name,
+  c.classify_middle_code as product_classify_middle_code,
+  c.classify_middle_name as product_classify_middle_name,
+  c.classify_small_code as product_classify_small_code,
+  c.classify_small_name as product_classify_small_name,
+  if(b.purchase_batch_no is not null,batch_qty,0) as meta_qty,
+  -- 原料消耗数量
+  if(b.purchase_batch_no is not null,batch_amt,0) as meta_amt,
+  -- 原料消耗金额
+  if(b.purchase_batch_no is not null,batch_amt_no_tax,0) as meta_amt_no_tax,
+  -- 原料消耗金额(未税)
+  1 as use_ratio,
+  -- 原料使用占比
+  1 as product_ratio,
+  -- 原料工单占比
+  b.source_order_no,
+  b.receive_dc_code,
+  -- 入库DC
+  f.shop_name receive_dc_name,
+  order_qty,
+  order_amt,
+  supplier_code,
+  supplier_name,
+  if(b.purchase_batch_no is not null, a.sale_price * batch_qty,0) as product_sale_amt,
+  if(b.purchase_batch_no is not null, (a.sale_price / (1 + tax_rate)) * a.batch_qty,0) as product_sale_amt_no_tax,
+  if(b.purchase_batch_no is not null,a.batch_amt,0) as product_cost_amt,
+  if(b.purchase_batch_no is not null,a.batch_amt_no_tax,0) as product_cost_amt_no_tax,
+  if(b.purchase_batch_no is not null,a.sale_price * batch_qty - batch_amt ,0) as product_profit,
+  if(b.purchase_batch_no is not null,(a.sale_price / (1 + tax_rate)) * a.batch_qty - batch_amt_no_tax ,0) as product_profit_no_tax,
+  if(b.purchase_batch_no is not null,(a.sale_price * batch_qty - batch_amt) / (a.sale_price * batch_qty),0) as product_profit_rate,
+  if(b.purchase_batch_no is not null,(
+    (a.sale_price / (1 + tax_rate)) * a.batch_qty - batch_amt_no_tax
+  ) / (a.sale_price / (1 + tax_rate) * a.batch_qty),0) as product_no_tax_profit_rate,
+  case
+    when supplier_type_code = '5' or business_type = 1 then '2'
+    when central_purchase_tag = '1' then '1'    
+    else '3'
+  end as purchase_order_type,
+  -- 采购订单类型1 集采采购 2 基地采购 3 其他采购
+  '1' as goods_shipped_type,
+  -- 商品出库类型1 A进A出 2工厂加工 3其他
+  current_timestamp() update_time,
+  channel_type_name,
+  channel_type_code,
+  supplier_type_code,
+  supplier_type_name,
+  if(b.purchase_batch_no is not null ,1,0)  purchase_crdential_flag,      -- 关联到的采购单号
+  1 is_meta_order_flag,            -- 原料是否关联到采购单  
+  substr(sdt, 1, 6) smt
+  from tmp_change_order a 
+left join 
+(SELECT purchase_batch_no,
+        wms_batch_no,
+        wms_order_no,
+         a.business_type,
+         central_purchase_tag,
+         source_order_no,
+         receive_dc_code,
+         supplier_code,
+         supplier_name,
+         goods_code,
+         channel_type_name,
+         channel_type_code,
+         supplier_type_code,
+         supplier_type_name,
+         sum(a.pur_qty) order_qty,
+         sum(a.pur_amt) order_amt
+     FROM csx_analyse_tmp.csx_analyse_tmp_source_order_02 a
+        where move_type_code in ('101A','102A')
+     group by purchase_batch_no,
+         a.business_type,
+         source_order_no,
+         receive_dc_code,
+         supplier_code,
+         central_purchase_tag,
+         supplier_name,
+         channel_type_name,
+         channel_type_code,
+         supplier_type_code,
+         supplier_type_name,
+         goods_code,
+         wms_batch_no,
+         wms_order_no
+     ) b ON a.source_batch_no = b.purchase_batch_no and a.goods_code=b.goods_code and a.batch_no=source_batch_no
+    left join (
+    select
+      goods_code,
+      tax_rate / 100 tax_rate,
+      short_name,
+      classify_large_code,
+      classify_large_name,
+      classify_middle_code,
+      classify_middle_name,
+      classify_small_code,
+      classify_small_name,
+      division_name
+    from
+      csx_analyse_tmp.csx_analyse_tmp_goods_short
+  ) c on a.goods_code = c.goods_code
+  left join csx_analyse_tmp.csx_analyse_tmp_dc_new d on a.dc_code = d.shop_code
+  left join csx_analyse_tmp.csx_analyse_tmp_dc_new f on b.receive_dc_code = f.shop_code
+where 1=1
+
+-- and province_name='北京'
+and source_credential_no is not null 
+),
+-- 转码原品
+
+ tmp_change_order_target
+  as 
+(select a.*,b.target_goods_code,
+        target_batch_no,
+        target_credential_no,
+        zm_order_code,
+        zm_dc_code,
+        b.source_batch_no,
+        b.source_goods_code
+from csx_analyse_tmp.csx_analyse_tmp_wms_change_order_detail_sale_01 a 
+left join 
+(select 
+        target_batch_no,
+        source_batch_no,
+        source_goods_code,
+        target_goods_code,
+        target_credential_no,
+        order_code as zm_order_code,
+        dc_code as zm_dc_code
+ from csx_analyse_tmp.csx_analyse_tmp_wms_change_order_detail 
+    group by target_batch_no,
+        target_credential_no,
+        source_batch_no,
+        order_code,
+        dc_code,
+        target_goods_code,
+        source_goods_code
+    )
+    
+    b on a.goods_code=b.target_goods_code and a.transfer_crdential_no=b.target_credential_no  and a.batch_no=target_batch_no
+    where in_or_out=0
+-- left join 
+-- (select order_code,goods_code,batch_no from csx_analyse_tmp.csx_analyse_tmp_source_puracse_product_02 )
+) ,
+-- select * from tmp_change_order a where source_batch_no='CB20241114176592'
+-- and source_goods_code='537'
+-- and source_batch_no='CB20241114176592'
+-- and a.goods_code='537'
+-- and a.order_code='OM24111600002107'
+tmp_change_order_target_01 as 
+(select substr(sdt, 1, 6) sale_month,
+  sdt as sale_sdt,
+  a.region_code,
+  a.region_name,
+  a.province_code,
+  a.province_name,
+  a.city_group_code,
+  a.city_group_name,
+  dc_code,
+  d.shop_name as dc_name,
+  a.credential_no,
+  order_code,
+  a.goods_code,
+  a.goods_name,
+  tax_rate,
+  division_code,
+  c.division_name,
+  c.classify_large_code,
+  c.classify_large_name,
+  c.classify_middle_code,
+  c.classify_middle_name,
+  c.classify_small_code,
+  c.classify_small_name,
+  sale_price,
+  a.sale_cost,
+  a.sale_amt,
+  a.sale_qty,
+  a.profit,
+  sale_amt_no_tax,
+  sale_cost_no_tax,
+  profit_no_tax,
+  a.batch_no,
+  batch_price,
+  batch_qty,
+  batch_amt,
+  batch_amt_no_tax,
+  if(b.purchase_batch_no is not null,(a.sale_price * batch_qty),0) as batch_sale_amt,
+  if(b.purchase_batch_no is not null,(a.sale_price / (1 + tax_rate) * batch_qty),0) as batch_sale_amt_no_tax,
+  if(b.purchase_batch_no is not null,(a.sale_price * batch_qty) - batch_amt,0) as batch_profit,
+  if(b.purchase_batch_no is not null,(a.sale_price / (1 + tax_rate) * batch_qty) - batch_amt_no_tax,0) as batch_profit_no_tax,
+  if(b.purchase_batch_no is not null,(a.sale_price * batch_qty - batch_amt) / (a.sale_price * batch_qty),0) as batch_profit_rate,
+  if(b.purchase_batch_no is not null,( a.sale_price / (1 + tax_rate) * batch_qty - batch_amt_no_tax ) / (a.sale_price / (1 + tax_rate) * batch_qty) ,0) as batch_profit_rate_no_tax,  '' as transfer_crdential_no,
+  -- 成品凭证单号
+  0 as transfer_price,
+  0 as transfer_qty,
+  0 as transfer_amt,
+  0 as transfer_amt_no_tax,
+  batch_no as meta_batch_no,
+  -- 原料批次成本单号
+  a.source_goods_code as product_code,
+  -- 原料商品编码
+  c.goods_name as product_name,
+  -- 原料商品名称
+  short_name,
+  tax_rate as product_tax_rate,
+  c.classify_large_code as product_classify_large_code,
+  c.classify_large_name as product_classify_large_name,
+  c.classify_middle_code as product_classify_middle_code,
+  c.classify_middle_name as product_classify_middle_name,
+  c.classify_small_code as product_classify_small_code,
+  c.classify_small_name as product_classify_small_name,
+  if(b.purchase_batch_no is not null,batch_qty,0) as meta_qty,
+  -- 原料消耗数量
+  if(b.purchase_batch_no is not null,batch_amt,0) as meta_amt,
+  -- 原料消耗金额
+  if(b.purchase_batch_no is not null,batch_amt_no_tax,0) as meta_amt_no_tax,
+  -- 原料消耗金额(未税)
+  1 as use_ratio,
+  -- 原料使用占比
+  1 as product_ratio,
+  -- 原料工单占比
+  b.source_order_no,
+  b.receive_dc_code,
+  -- 入库DC
+  f.shop_name receive_dc_name,
+  order_qty,
+  order_amt,
+  supplier_code,
+  supplier_name,
+  if(b.purchase_batch_no is not null, a.sale_price * batch_qty,0) as product_sale_amt,
+  if(b.purchase_batch_no is not null, (a.sale_price / (1 + tax_rate)) * a.batch_qty,0) as product_sale_amt_no_tax,
+  if(b.purchase_batch_no is not null,a.batch_amt,0) as product_cost_amt,
+  if(b.purchase_batch_no is not null,a.batch_amt_no_tax,0) as product_cost_amt_no_tax,
+  if(b.purchase_batch_no is not null,a.sale_price * batch_qty - batch_amt ,0) as product_profit,
+  if(b.purchase_batch_no is not null,(a.sale_price / (1 + tax_rate)) * a.batch_qty - batch_amt_no_tax ,0) as product_profit_no_tax,
+  if(b.purchase_batch_no is not null,(a.sale_price * batch_qty - batch_amt) / (a.sale_price * batch_qty),0) as product_profit_rate,
+  if(b.purchase_batch_no is not null,(
+    (a.sale_price / (1 + tax_rate)) * a.batch_qty - batch_amt_no_tax
+  ) / (a.sale_price / (1 + tax_rate) * a.batch_qty),0) as product_no_tax_profit_rate,
+  case
+    when supplier_type_code = '5' or business_type = 1 then '2'
+    when central_purchase_tag = '1' then '1'    
+    else '3'
+  end as purchase_order_type,
+  -- 采购订单类型1 集采采购 2 基地采购 3 其他采购
+  '1' as goods_shipped_type,
+  -- 商品出库类型1 A进A出 2工厂加工 3其他
+  current_timestamp() update_time,
+  channel_type_name,
+  channel_type_code,
+  supplier_type_code,
+  supplier_type_name,
+  if(b.purchase_batch_no is not null ,1,0)  purchase_crdential_flag,      -- 关联到的采购单号
+  1 is_meta_order_flag,            -- 原料是否关联到采购单  
+  substr(sdt, 1, 6) smt
+  from tmp_change_order_target a 
+left join 
+(SELECT purchase_batch_no,
+        wms_batch_no,
+        wms_order_no,
         a.business_type,
+        central_purchase_tag,
         source_order_no,
+        receive_dc_code,
         supplier_code,
         supplier_name,
-        a.goods_code,
-        receive_dc_code,
-        central_purchase_tag
-    ) b on a.batch_no=b.purchase_batch_no and b.goods_code=a.goods_code
-join
-(select goods_code,
-    short_name,
-    tax_rate/100 tax_rate,
-    classify_large_code,
-    classify_large_name,
-    classify_middle_code,
-    classify_middle_name,
-    classify_small_code,
-    classify_small_name,
-    division_name
- from csx_analyse_tmp.csx_analyse_tmp_jd_goods_short ) c on a.goods_code=c.goods_code
-join 
- csx_analyse_tmp.csx_analyse_tmp_jd_dc_new d on a.dc_code=d.shop_code
-join csx_analyse_tmp.csx_analyse_tmp_jd_dc_new f on b.receive_dc_code=f.shop_code
-where central_purchase_tag=1
-and a.classify_large_code !='B02';
-
-
+        goods_code,
+        channel_type_name,
+        channel_type_code,
+        supplier_type_code,
+        supplier_type_name,
+        sum(a.pur_qty) order_qty,
+        sum(a.pur_amt) order_amt
+     FROM csx_analyse_tmp.csx_analyse_tmp_source_order_02 a
+        where move_type_code in ('101A','102A')
+     group by purchase_batch_no,
+         a.business_type,
+         source_order_no,
+         receive_dc_code,
+         supplier_code,
+         central_purchase_tag,
+         supplier_name,
+         channel_type_name,
+         channel_type_code,
+         supplier_type_code,
+         supplier_type_name,
+         goods_code,
+         wms_batch_no,
+         wms_order_no
+     ) b ON a.source_batch_no = b.purchase_batch_no and a.source_goods_code=b.goods_code
+    left join (
+    select
+      goods_code,
+      goods_name,
+      tax_rate / 100 tax_rate,
+      short_name,
+      classify_large_code,
+      classify_large_name,
+      classify_middle_code,
+      classify_middle_name,
+      classify_small_code,
+      classify_small_name,
+      division_name
+    from
+      csx_analyse_tmp.csx_analyse_tmp_goods_short
+  ) c on a.target_goods_code = c.goods_code
+  left join csx_analyse_tmp.csx_analyse_tmp_dc_new d on a.dc_code = d.shop_code
+  left join csx_analyse_tmp.csx_analyse_tmp_dc_new f on b.receive_dc_code = f.shop_code
+where 1=1 
+-- where province_name='北京'
+and target_credential_no is not null 
+)
+select a.* 
+from  
+(select * from tmp_change_order_01
+union all 
+select * from tmp_change_order_target_01) a 
+left join 
+(select order_code,goods_code,batch_no,source_order_no
+from
+(
+select order_code,goods_code,batch_no,source_order_no
+from csx_analyse_tmp.csx_analyse_tmp_source_puracse_product_02
+union all 
+select  order_code,goods_code,batch_no,source_order_no
+from csx_analyse_tmp.csx_analyse_tmp_source_batch_sale_trans_02
+) a 
+group by  order_code,goods_code,batch_no,source_order_no
+) b on a.order_code=b.order_code and a.batch_no=b.batch_no and a.goods_code=b.goods_code and a.source_order_no=b.source_order_no
+where b.order_code is null 
+;
 
 
 insert overwrite table csx_analyse.csx_analyse_fr_fina_goods_sale_trace_po_di partition(month)
 
 -- drop table csx_analyse_tmp.csx_analyse_tmp_fr_fina_goods_sale_trace_po_di;
 -- create table csx_analyse_tmp.csx_analyse_tmp_fr_fina_goods_sale_trace_po_di as
-select * from csx_analyse_tmp.csx_analyse_tmp_jd_puracse_product_01
-union all 
-select * from csx_analyse_tmp.csx_analyse_tmp_jd_puracse_product_02
+select sale_month
+        ,sale_sdt
+        ,region_code
+        ,region_name
+        ,province_code
+        ,province_name
+        ,city_group_code
+        ,city_group_name
+        ,dc_code
+        ,dc_name
+        ,credential_no
+        ,order_code
+        ,goods_code
+        ,goods_name
+        ,tax_rate
+        ,division_code
+        ,division_name
+        ,classify_large_code
+        ,classify_large_name
+        ,classify_middle_code
+        ,classify_middle_name
+        ,classify_small_code
+        ,classify_small_name
+        ,sale_price
+        ,sale_cost
+        ,sale_amt
+        ,sale_qty
+        ,profit
+        ,sale_amt_no_tax
+        ,sale_cost_no_tax
+        ,profit_no_tax
+        ,batch_no
+        ,batch_price
+        ,batch_qty
+        ,batch_amt
+        ,batch_amt_no_tax
+        ,batch_sale_amt
+        ,batch_sale_amt_no_tax
+        ,batch_profit
+        ,batch_profit_no_tax
+        ,batch_profit_rate
+        ,batch_profit_rate_no_tax
+        ,transfer_crdential_no
+        ,transfer_price
+        ,transfer_qty
+        ,transfer_amt
+        ,transfer_amt_no_tax
+        ,meta_batch_no
+        ,product_code
+        ,product_name
+        ,short_name
+        ,product_tax_rate
+        ,product_classify_large_code
+        ,product_classify_large_name
+        ,product_classify_middle_code
+        ,product_classify_middle_name
+        ,product_classify_small_code
+        ,product_classify_small_name
+        ,meta_qty
+        ,meta_amt
+        ,meta_amt_no_tax
+        ,use_ratio
+        ,product_ratio
+        ,source_order_no
+        ,receive_dc_code
+        ,receive_dc_name
+        ,order_qty
+        ,order_amt
+        ,supplier_code
+        ,supplier_name
+        ,product_sale_amt
+        ,product_sale_amt_no_tax
+        ,product_cost_amt
+        ,product_cost_amt_no_tax
+        ,product_profit
+        ,product_profit_no_tax
+        ,product_profit_rate
+        ,product_no_tax_profit_rate
+        ,purchase_order_type
+        ,goods_shipped_type
+        ,update_time
+        ,channel_type_name
+        ,channel_type_code
+        ,supplier_type_code
+        ,supplier_type_name
+        ,purchase_crdential_flag
+        ,is_meta_order_flag
+      
 
-;
+        ,case
+          when source_order_no is null
+          and goods_shipped_type = '2' then '采购订单加工商品未关联'
+          when source_order_no is null
+          and goods_shipped_type = '1' then '采购订单采购商品未关联'
+          else '已关联'
+        end type_flag,
+        smt
+ from csx_analyse_tmp.csx_analyse_tmp_source_puracse_product_01
+union all 
+select  sale_month
+        ,sale_sdt
+        ,region_code
+        ,region_name
+        ,province_code
+        ,province_name
+        ,city_group_code
+        ,city_group_name
+        ,dc_code
+        ,dc_name
+        ,credential_no
+        ,order_code
+        ,goods_code
+        ,goods_name
+        ,tax_rate
+        ,division_code
+        ,division_name
+        ,classify_large_code
+        ,classify_large_name
+        ,classify_middle_code
+        ,classify_middle_name
+        ,classify_small_code
+        ,classify_small_name
+        ,sale_price
+        ,sale_cost
+        ,sale_amt
+        ,sale_qty
+        ,profit
+        ,sale_amt_no_tax
+        ,sale_cost_no_tax
+        ,profit_no_tax
+        ,batch_no
+        ,batch_price
+        ,batch_qty
+        ,batch_amt
+        ,batch_amt_no_tax
+        ,batch_sale_amt
+        ,batch_sale_amt_no_tax
+        ,batch_profit
+        ,batch_profit_no_tax
+        ,batch_profit_rate
+        ,batch_profit_rate_no_tax
+        ,transfer_crdential_no
+        ,transfer_price
+        ,transfer_qty
+        ,transfer_amt
+        ,transfer_amt_no_tax
+        ,meta_batch_no
+        ,product_code
+        ,product_name
+        ,short_name
+        ,product_tax_rate
+        ,product_classify_large_code
+        ,product_classify_large_name
+        ,product_classify_middle_code
+        ,product_classify_middle_name
+        ,product_classify_small_code
+        ,product_classify_small_name
+        ,meta_qty
+        ,meta_amt
+        ,meta_amt_no_tax
+        ,use_ratio
+        ,product_ratio
+        ,source_order_no
+        ,receive_dc_code
+        ,receive_dc_name
+        ,order_qty
+        ,order_amt
+        ,supplier_code
+        ,supplier_name
+        ,product_sale_amt
+        ,product_sale_amt_no_tax
+        ,product_cost_amt
+        ,product_cost_amt_no_tax
+        ,product_profit
+        ,product_profit_no_tax
+        ,product_profit_rate
+        ,product_no_tax_profit_rate
+        ,purchase_order_type
+        ,goods_shipped_type
+        ,update_time
+        ,channel_type_name
+        ,channel_type_code
+        ,supplier_type_code
+        ,supplier_type_name
+        ,purchase_crdential_flag
+        ,is_meta_order_flag
+
+        ,case
+          when source_order_no is null
+          and goods_shipped_type = '2' then '采购加工商品未关联'
+          when source_order_no is null
+          and goods_shipped_type = '1' then '采购商品未关联'
+          else '已关联'
+        end type_flag,
+        smt
+ from csx_analyse_tmp.csx_analyse_tmp_source_puracse_product_02
+ union all 
+ select  sale_month
+        ,sale_sdt
+        ,region_code
+        ,region_name
+        ,province_code
+        ,province_name
+        ,city_group_code
+        ,city_group_name
+        ,dc_code
+        ,dc_name
+        ,credential_no
+        ,order_code
+        ,goods_code
+        ,goods_name
+        ,tax_rate
+        ,division_code
+        ,division_name
+        ,classify_large_code
+        ,classify_large_name
+        ,classify_middle_code
+        ,classify_middle_name
+        ,classify_small_code
+        ,classify_small_name
+        ,sale_price
+        ,sale_cost
+        ,sale_amt
+        ,sale_qty
+        ,profit
+        ,sale_amt_no_tax
+        ,sale_cost_no_tax
+        ,profit_no_tax
+        ,batch_no
+        ,batch_price
+        ,batch_qty
+        ,batch_amt
+        ,batch_amt_no_tax
+        ,batch_sale_amt
+        ,batch_sale_amt_no_tax
+        ,batch_profit
+        ,batch_profit_no_tax
+        ,batch_profit_rate
+        ,batch_profit_rate_no_tax
+        ,transfer_crdential_no
+        ,transfer_price
+        ,transfer_qty
+        ,transfer_amt
+        ,transfer_amt_no_tax
+        ,meta_batch_no
+        ,product_code
+        ,product_name
+        ,short_name
+        ,product_tax_rate
+        ,product_classify_large_code
+        ,product_classify_large_name
+        ,product_classify_middle_code
+        ,product_classify_middle_name
+        ,product_classify_small_code
+        ,product_classify_small_name
+        ,meta_qty
+        ,meta_amt
+        ,meta_amt_no_tax
+        ,use_ratio
+        ,product_ratio
+        ,source_order_no
+        ,receive_dc_code
+        ,receive_dc_name
+        ,order_qty
+        ,order_amt
+        ,supplier_code
+        ,supplier_name
+        ,product_sale_amt
+        ,product_sale_amt_no_tax
+        ,product_cost_amt
+        ,product_cost_amt_no_tax
+        ,product_profit
+        ,product_profit_no_tax
+        ,product_profit_rate
+        ,product_no_tax_profit_rate
+        ,purchase_order_type
+        ,goods_shipped_type
+        ,update_time
+        ,channel_type_name
+        ,channel_type_code
+        ,supplier_type_code
+        ,supplier_type_name
+        ,purchase_crdential_flag
+        ,is_meta_order_flag
+
+        ,case
+          when source_order_no is null
+          and goods_shipped_type = '2' then '调拨加工商品未关联'
+          when source_order_no is null
+          and goods_shipped_type = '1' then '调拨采购商品未关联'
+          else '已关联'
+        end type_flag,
+        smt
+ from  csx_analyse_tmp.csx_analyse_tmp_source_batch_sale_trans_02
+ union all 
+  select  sale_month
+        ,sale_sdt
+        ,region_code
+        ,region_name
+        ,province_code
+        ,province_name
+        ,city_group_code
+        ,city_group_name
+        ,dc_code
+        ,dc_name
+        ,credential_no
+        ,order_code
+        ,goods_code
+        ,goods_name
+        ,tax_rate
+        ,division_code
+        ,division_name
+        ,classify_large_code
+        ,classify_large_name
+        ,classify_middle_code
+        ,classify_middle_name
+        ,classify_small_code
+        ,classify_small_name
+        ,sale_price
+        ,sale_cost
+        ,sale_amt
+        ,sale_qty
+        ,profit
+        ,sale_amt_no_tax
+        ,sale_cost_no_tax
+        ,profit_no_tax
+        ,batch_no
+        ,batch_price
+        ,batch_qty
+        ,batch_amt
+        ,batch_amt_no_tax
+        ,batch_sale_amt
+        ,batch_sale_amt_no_tax
+        ,batch_profit
+        ,batch_profit_no_tax
+        ,batch_profit_rate
+        ,batch_profit_rate_no_tax
+        ,transfer_crdential_no
+        ,transfer_price
+        ,transfer_qty
+        ,transfer_amt
+        ,transfer_amt_no_tax
+        ,meta_batch_no
+        ,product_code
+        ,product_name
+        ,short_name
+        ,product_tax_rate
+        ,product_classify_large_code
+        ,product_classify_large_name
+        ,product_classify_middle_code
+        ,product_classify_middle_name
+        ,product_classify_small_code
+        ,product_classify_small_name
+        ,meta_qty
+        ,meta_amt
+        ,meta_amt_no_tax
+        ,use_ratio
+        ,product_ratio
+        ,source_order_no
+        ,receive_dc_code
+        ,receive_dc_name
+        ,order_qty
+        ,order_amt
+        ,supplier_code
+        ,supplier_name
+        ,product_sale_amt
+        ,product_sale_amt_no_tax
+        ,product_cost_amt
+        ,product_cost_amt_no_tax
+        ,product_profit
+        ,product_profit_no_tax
+        ,product_profit_rate
+        ,product_no_tax_profit_rate
+        ,purchase_order_type
+        ,goods_shipped_type
+        ,update_time
+        ,channel_type_name
+        ,channel_type_code
+        ,supplier_type_code
+        ,supplier_type_name
+        ,purchase_crdential_flag
+        ,is_meta_order_flag
+
+        ,case
+          when source_order_no is null
+          and goods_shipped_type = '2' then '转码加工商品未关联'
+          when source_order_no is null
+          and goods_shipped_type = '1' then '转码采购商品未关联'
+          else '已关联'
+        end type_flag,
+        smt
+    from csx_analyse_tmp.csx_analyse_tmp_change_order_sale_detail 
+ ;

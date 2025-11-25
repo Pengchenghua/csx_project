@@ -477,7 +477,7 @@ performance_region_name
 ,s_month
 from csx_analyse.csx_analyse_hr_customer_deferred_reconciliation_invoice_detail_mf
 
-CREATE TABLE IF NOT EXISTS data_analysis_prd.report_csx_analyse_hr_customer_bill_account_result_mi( 
+CREATE TABLE IF NOT EXISTS data_analysis_prd.report_csx_analyse_hr_customer_reconciliation_invoice_result( 
 
 `id` BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY COMMENT '主键ID',
 `performance_region_code` VARCHAR(64)  COMMENT '大区编码',

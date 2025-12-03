@@ -1,4 +1,6 @@
 --OEM绩效数据源
+
+--已上线数据中心，路径HR--绩效专题--OEM绩效销售数据
 with tmp_goods_info as 
 (select goods_code,
        goods_bar_code,
@@ -31,6 +33,7 @@ select
 	-- a.performance_region_name,
 	-- a.performance_province_name,	
 	-- a.performance_city_name,
+	substr(sdt,1,6) s_month,
 	business_type_name,
     b.classify_large_name,
     b.classify_middle_code,
@@ -55,10 +58,12 @@ select
 	a.sale_amt,
 	a.sale_cost,
 	a.profit,
-	direct_delivery_type
+	direct_delivery_type,
+	sdt
 from csx_dws.csx_dws_sale_detail_di a 
 where 1=1
-and sdt>='20251001' and sdt<='20251031'
+and sdt>=regexp_replace(to_date('${sdate}'),'-','')
+and sdt<=regexp_replace(to_date('${edate}'),'-','')
 and business_type_code in ('1','2','6','9','10')
 )a 
 join tmp_goods_info b on a.goods_code=b.goods_code
@@ -79,10 +84,12 @@ group by business_type_name,
 	b.goods_bar_code,
 	b.goods_name,
 	b.csx_purchase_level_code,
-	classify_small_name
+	classify_small_name,
+	substr(sdt,1,6)
 )
 
-select business_type_name,
+select s_month,
+  business_type_name,
   classify_large_name,
   classify_middle_name,
   classify_small_name,
@@ -100,7 +107,10 @@ group by
   goods_code,
   goods_bar_code,
   goods_name 
-,business_type_name;
+,business_type_name,
+s_month
+;
+
 
 
 

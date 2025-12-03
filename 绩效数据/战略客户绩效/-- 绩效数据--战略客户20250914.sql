@@ -1,103 +1,132 @@
--- 绩效数据--战略客户
+-- 绩效数据--战略客户部
 -- 战略客户关联商机20250914
-with tmp_sale_detail as 
-(
-SELECT substr(sdt,1,4)yesrs,
-  substr(sdt,1,6) mon,
-  a.performance_region_name,
-  a.performance_province_name,
-  a.customer_code,
-  b.customer_name,
-  a.business_type_name,  
-  strategy_user_name,
-  -- sign_company_code,
---   agreement_company_code,
---   agreement_dc_code,
-  sum(sale_amt) sale_amt,
-  sum(a.profit) profit,
-  sum(a.profit)/abs(sum(a.sale_amt)) profit_rate,
-  sum(case when partner_type_code in (1,3) then sale_amt end ) partner_sale_amt,
-  sum(case when partner_type_code in (1,3) then profit end ) partner_profit
-from    csx_dws.csx_dws_sale_detail_di a
-left  join
---    客户信息
-(
-  select 
-    customer_code,
-	customer_name ,
-	strategy_status,
-	strategy_user_name
-  from csx_dim.csx_dim_crm_customer_info 
-  where sdt='current'
-  and customer_code<>''
-  and channel_code in('1','7','9')
-  
-)b on b.customer_code=a.customer_code
-left join 
-(select shop_code,company_code as agreement_company_code from csx_dim.csx_dim_shop where sdt='current') c on a.agreement_dc_code=c.shop_code
-where  a.channel_code in ('1','7','9')--  and  a.business_type_name  in ('城市服务商','BBC','日配业务','福利业务')  
-and a.sdt>='20251001' 
-and a.sdt<='20251031'
-    and (b.strategy_status =1 or a.customer_code in('243884','232923'))
-
-group by a.customer_code,b.customer_name,a.business_type_name,strategy_user_name,
-substr(sdt,1,6),
--- sign_company_code,
--- agreement_dc_code,
-agreement_company_code,
-substr(sdt,1,4),
-performance_province_name,
-performance_region_name
+WITH tmp_sale_detail AS (
+  SELECT 
+    SUBSTR(sdt, 1, 4) AS years,
+    SUBSTR(sdt, 1, 6) AS mon,
+    a.performance_region_name,
+    a.performance_province_name,
+    a.customer_code,
+    b.customer_name,
+    a.sign_company_code,    -- 签约公司
+    a.business_type_name,
+    b.strategy_user_number,
+    b.strategy_user_name,
+    b.second_category_name,
+    SUM(sale_amt) AS sale_amt,
+    SUM(a.profit) AS profit,
+    CASE 
+      WHEN SUM(a.sale_amt) != 0 THEN SUM(a.profit) / ABS(SUM(a.sale_amt)) 
+      ELSE 0 
+    END AS profit_rate,
+    SUM(CASE WHEN partner_type_code IN (1,3) THEN sale_amt END) AS partner_sale_amt,
+    SUM(CASE WHEN partner_type_code IN (1,3) THEN profit END) AS partner_profit
+  FROM   csx_dws.csx_dws_sale_detail_di a
+  LEFT JOIN (
+    -- 客户信息
+    SELECT 
+      customer_code,
+      customer_name,
+      strategy_status,
+      strategy_user_number,
+      strategy_user_name,
+      first_category_name,
+      second_category_name,
+      third_category_name
+    FROM     csx_dim.csx_dim_crm_customer_info 
+    WHERE sdt = 'current'
+      AND customer_code <> ''
+      AND channel_code IN ('1','7','9')
+  ) b ON b.customer_code = a.customer_code
+  WHERE a.channel_code IN ('1','7','9')
+    AND a.sdt >= '${sdate}' 
+    AND a.sdt <= '${edate}'
+    AND (b.strategy_status = 1 OR a.customer_code IN ('243884','232923'))
+  GROUP BY 
+    a.customer_code,
+    b.customer_name,
+    b.strategy_user_number,
+    a.business_type_name,
+    b.strategy_user_name,
+    SUBSTR(sdt, 1, 6),
+    SUBSTR(sdt, 1, 4),
+    a.performance_province_name,
+    a.performance_region_name,
+    a.sign_company_code,
+    b.second_category_name
+),
+business_info AS (
+  SELECT * FROM (
+    SELECT 
+      business_number,
+      customer_code,
+      business_sign_time,
+      CASE 
+        WHEN business_attribute_name IN ('日配','福利') THEN CONCAT(business_attribute_name, '业务') 
+        ELSE business_attribute_name 
+      END AS business_attribute_name,
+      SUBSTR(REPLACE(CAST(business_sign_time AS STRING), '-', ''), 1, 4) AS sye,
+      owner_user_number,
+      owner_user_name,
+      estimate_contract_amount,
+      ROW_NUMBER() OVER (
+        PARTITION BY customer_code, business_attribute_name, SUBSTR(REPLACE(CAST(business_sign_time AS STRING), '-', ''), 1, 4) 
+        ORDER BY business_sign_time DESC
+      ) AS rn
+    FROM csx_dim.csx_dim_crm_business_info 
+    WHERE sdt = 'current' 
+      AND business_stage = 5
+  ) t WHERE rn = 1
 )
-select a.yesrs,
-  mon,
+SELECT 
+  a.years,
+  a.mon,
   a.performance_region_name,
   a.performance_province_name,
   a.customer_code,
   a.customer_name,
+  a.sign_company_code,
+  a.second_category_name,
   a.business_type_name,  
+  a.strategy_user_number,
   a.strategy_user_name,
---   b.business_sign_time,
-  sale_amt,
-  profit,
-  profit_rate,
-  partner_sale_amt,
-  partner_profit,
-  partner_profit/partner_sale_amt as partner_profit_rate,
-  if(mon=first_business_sign_month,'是','否') is_new_flag,
-  business_number,
-  business_sign_time,
-  estimate_contract_amount,
-  owner_user_number,
-  owner_user_name, 
-  last_business_sale_date
-from tmp_sale_detail a  
-left join 
-(
-
-select * from  (select  
-    business_number,
+  a.sale_amt,
+  a.profit,
+  a.profit_rate,
+  a.partner_sale_amt,
+  a.partner_profit,
+  CASE 
+    WHEN a.partner_sale_amt != 0 THEN a.partner_profit / a.partner_sale_amt 
+    ELSE 0 
+    END AS partner_profit_rate,
+  CASE 
+    WHEN a.mon = d.first_business_sign_month THEN '是' 
+    ELSE '否' 
+  END AS is_new_flag,
+  b.business_number,
+  b.business_sign_time,
+  b.estimate_contract_amount,
+  b.owner_user_number,
+  b.owner_user_name, 
+  d.last_business_sale_date
+FROM tmp_sale_detail a  
+LEFT JOIN business_info b
+  ON a.customer_code = b.customer_code 
+  AND b.sye = a.years 
+  AND a.business_type_name = b.business_attribute_name
+LEFT JOIN (
+  SELECT 
     customer_code,
-    business_sign_time,
-    case when business_attribute_name in ('日配','福利') then concat(business_attribute_name,'业务') else business_attribute_name end  business_attribute_name,
-    substr(regexp_replace(to_date(business_sign_time),'-',''),1,4) sye,
-    owner_user_number,
-    owner_user_name,
-    estimate_contract_amount,
-    row_number()over(partition by customer_code,business_attribute_name,substr(regexp_replace(to_date(business_sign_time),'-',''),1,4) order by business_sign_time desc) rn
-  from   csx_dim.csx_dim_crm_business_info 
-    where sdt='current' 
-        and business_stage=5
-    )a
-    where rn=1
-    ) b
-on a.customer_code=b.customer_code and sye=a.yesrs and a.business_type_name=b.business_attribute_name
-left join 
-(select customer_code,business_type_name,last_business_sale_date, substr(first_business_sign_date,1,6)first_business_sign_month
-from    csx_dws.csx_dws_crm_customer_business_active_di 
-where sdt='current') d on a.customer_code=d.customer_code and a.business_type_name=d.business_type_name
-
-;
+    business_type_name,
+    last_business_sale_date, 
+    SUBSTR(first_business_sign_date, 1, 6) AS first_business_sign_month
+  FROM csx_dws.csx_dws_crm_customer_business_active_di 
+  WHERE sdt = 'current'
+    AND last_business_sale_date <= '${edate}'
+) d ON a.customer_code = d.customer_code 
+  AND a.business_type_name = d.business_type_name
+  ;
+  
 
 --  -战略客户new
 --

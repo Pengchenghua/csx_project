@@ -1,5 +1,6 @@
 -- 绩效数据--战略客户部
 -- 战略客户关联商机20250914
+-- 战略客户关联商机20250914
 WITH tmp_sale_detail AS (
   SELECT 
     SUBSTR(sdt, 1, 4) AS years,
@@ -13,6 +14,7 @@ WITH tmp_sale_detail AS (
     b.strategy_user_number,
     b.strategy_user_name,
     b.second_category_name,
+    b.strategy_status,
     SUM(sale_amt) AS sale_amt,
     SUM(a.profit) AS profit,
     CASE 
@@ -41,7 +43,7 @@ WITH tmp_sale_detail AS (
   WHERE a.channel_code IN ('1','7','9')
     AND a.sdt >= '${sdate}' 
     AND a.sdt <= '${edate}'
-    AND (b.strategy_status = 1 OR a.customer_code IN ('243884','232923'))
+    -- AND (b.strategy_status = 1 OR a.customer_code IN ('243884','232923'))
   GROUP BY 
     a.customer_code,
     b.customer_name,
@@ -53,7 +55,43 @@ WITH tmp_sale_detail AS (
     a.performance_province_name,
     a.performance_region_name,
     a.sign_company_code,
-    b.second_category_name
+    b.second_category_name,
+    b.strategy_status
+),
+tmp_user_info as 
+(select
+  a.*,
+  b.name
+from
+  (
+    select
+      a.sdt,
+      cast(a.user_id as string) user_id,
+      user_number,
+      user_name,
+      coalesce(user_position, source_user_position) user_position,
+      source_user_position,
+      province_id,
+      province_name,
+      city_code,
+      city_name,
+      status
+    from
+      csx_dim.csx_dim_uc_user a
+    where
+      sdt = '${edate}'
+  ) a
+  join (
+    select
+      dic_key as code,
+      dic_value as name
+    from
+      csx_ods.csx_ods_csx_b2b_ucenter_user_dic_df
+    where
+      sdt = regexp_replace(to_date(date_sub(current_timestamp(), 1)), '-', '')
+      and dic_type = 'POSITION'
+      and dic_value like '战略客户%'
+  ) b on a.source_user_position = b.code
 ),
 business_info AS (
   SELECT * FROM (
@@ -72,12 +110,14 @@ business_info AS (
       ROW_NUMBER() OVER (
         PARTITION BY customer_code, business_attribute_name, SUBSTR(REPLACE(CAST(business_sign_time AS STRING), '-', ''), 1, 4) 
         ORDER BY business_sign_time DESC
-      ) AS rn
-    FROM csx_dim.csx_dim_crm_business_info 
-    WHERE sdt = 'current' 
+      ) AS rn,
+      if(b.user_name is not null ,1,0) as no_customer_flag
+    FROM csx_dim.csx_dim_crm_business_info a 
+    left join tmp_user_info b on a.owner_user_number = b.user_number
+    WHERE a.sdt = 'current' 
       AND business_stage = 5
   ) t WHERE rn = 1
-)
+  )
 SELECT 
   a.years,
   a.mon,
@@ -88,6 +128,7 @@ SELECT
   a.sign_company_code,
   a.second_category_name,
   a.business_type_name,  
+  a.strategy_status,
   a.strategy_user_number,
   a.strategy_user_name,
   a.sale_amt,
@@ -125,6 +166,7 @@ LEFT JOIN (
     AND last_business_sale_date <= '${edate}'
 ) d ON a.customer_code = d.customer_code 
   AND a.business_type_name = d.business_type_name
+  where (a.strategy_status=1 or a.customer_code in ('243884','232923') or b.no_customer_flag=1)
   ;
   
 

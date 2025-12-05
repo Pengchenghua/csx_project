@@ -1,6 +1,5 @@
 -- 绩效数据--战略客户部
 -- 战略客户关联商机20250914
--- 战略客户关联商机20250914
 WITH tmp_sale_detail AS (
   SELECT 
     SUBSTR(sdt, 1, 4) AS years,

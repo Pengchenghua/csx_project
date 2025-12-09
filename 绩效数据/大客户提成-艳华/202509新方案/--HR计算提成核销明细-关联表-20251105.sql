@@ -18,14 +18,13 @@ SET hive.merge.tezfiles=false;
 
 --  drop table  csx_analyse_tmp.csx_analyse_tmp_bill ;
 --  create table csx_analyse_tmp.csx_analyse_tmp_bill as 
-with tmp_tc_cust_credit_bill_nsale 
-as
-(select 
-	a.bill_type,  -- 单据类型 10正常单 11福利单  20退货单 30返利单 40尾差调整单 -1 期初单
-	a.sdt,
-	bbc_bill_flag,
-	source_bill_no,	-- 来源单号
-    CASE WHEN source_sys='BBC' AND substr(source_bill_no,1,1) = 'S' 
+with tmp_bill_data as 
+(
+	select bbc_bill_flag,
+		bill_type,  -- 单据类型 10正常单 11福利单  20退货单 30返利单 40尾差调整单 -1 期初单
+		sdt,
+		source_bill_no,	-- 来源单号
+		CASE WHEN source_sys='BBC' AND substr(source_bill_no,1,1) = 'S' 
           THEN regexp_replace(substr(source_bill_no,3), '^0+', '')
         -- 原有逻辑：以B开头且结尾是(A-E)字母的情况
         WHEN source_sys='BBC' AND substr(split(source_bill_no,'-')[0],1,1)='B' 
@@ -40,35 +39,7 @@ as
           THEN regexp_replace(source_bill_no,'^[A-Za-z]+|[A-Za-z]+$','')
         -- 默认情况
         ELSE split(source_bill_no,'-')[0]
-    END AS source_bill_no_new,
-	a.customer_code,	-- 客户编码
-	a.credit_code,	-- 信控号
-	a.happen_date,	-- 发生时间		
-	a.company_code,	-- 签约公司编码
-	-- a.account_period_code,	-- 账期编码
-	-- a.account_period_name,	-- 账期名称
-	-- a.account_period_value,	-- 账期值
-	a.source_sys,	-- 来源系统 MALL B端销售 BBC BBC端 BEGIN期初
-	a.reconciliation_period,  -- 对账周期
-	a.bill_date, -- 结算日期
-	a.overdue_date,	-- 逾期开始日期	
-	b.paid_date,	-- 核销日期
-	b.paid_date_new, -- 优化取打款日期、无打款日期取实际核销日期（大客户提成使用）
-	a.order_amt,	-- 源单据对账金额
-	c.unpay_amt,    -- 历史核销剩余金额
-	c.pay_amt as history_pay_amt,
-	sum(b.pay_amt) pay_amt_old,	-- 原核销金额
-	-- 如果本月核销金额大于历史核销剩余金额则按比例折算
-	sum(if(c.unpay_amt is null,b.pay_amt,
-		if(c.unpay_amt=0,0,
-		if(c.unpay_amt<>0 and b.pay_amt_bill<>0 and abs(b.pay_amt_bill/c.unpay_amt)>1,b.pay_amt/abs(b.pay_amt_bill/c.unpay_amt),b.pay_amt)
-		))) pay_amt  -- 核销金额，这里考虑后历史核销后又红冲的情况 
-from 
-(
-	select bbc_bill_flag,
-		bill_type,  -- 单据类型 10正常单 11福利单  20退货单 30返利单 40尾差调整单 -1 期初单
-		sdt,
-		source_bill_no,	-- 来源单号
+    END AS source_bill_no_new,	-- 来源单号_新
 		customer_code,	-- 客户编码
 		credit_code,	-- 信控号
 		happen_date,	-- 发生时间
@@ -136,6 +107,109 @@ from
 	where sdt=regexp_replace(add_months(date_sub(current_date,1),0),'-','')
 	and date_format(happen_date,'yyyy-MM-dd')>='2022-06-01'
 	and shipper_code='YHCSX'
+),
+ tmp_tc_cust_credit_bill_nsale 
+as
+(select 
+	a.bill_type,  -- 单据类型 10正常单 11福利单  20退货单 30返利单 40尾差调整单 -1 期初单
+	a.sdt,
+	bbc_bill_flag,
+	source_bill_no,	-- 来源单号
+    source_bill_no_new,
+	a.customer_code,	-- 客户编码
+	a.credit_code,	-- 信控号
+	a.happen_date,	-- 发生时间		
+	a.company_code,	-- 签约公司编码
+	-- a.account_period_code,	-- 账期编码
+	-- a.account_period_name,	-- 账期名称
+	-- a.account_period_value,	-- 账期值
+	a.source_sys,	-- 来源系统 MALL B端销售 BBC BBC端 BEGIN期初
+	a.reconciliation_period,  -- 对账周期
+	a.bill_date, -- 结算日期
+	a.overdue_date,	-- 逾期开始日期	
+	b.paid_date,	-- 核销日期
+	b.paid_date_new, -- 优化取打款日期、无打款日期取实际核销日期（大客户提成使用）
+	a.order_amt,	-- 源单据对账金额
+	c.unpay_amt,    -- 历史核销剩余金额
+	c.pay_amt as history_pay_amt,
+	sum(b.pay_amt) pay_amt_old,	-- 原核销金额
+	-- 如果本月核销金额大于历史核销剩余金额则按比例折算
+	sum(if(c.unpay_amt is null,b.pay_amt,
+		if(c.unpay_amt=0,0,
+		if(c.unpay_amt<>0 and b.pay_amt_bill<>0 and abs(b.pay_amt_bill/c.unpay_amt)>1,b.pay_amt/abs(b.pay_amt_bill/c.unpay_amt),b.pay_amt)
+		))) pay_amt  -- 核销金额，这里考虑后历史核销后又红冲的情况 
+from 
+(
+	select bbc_bill_flag,
+		bill_type,  -- 单据类型 10正常单 11福利单  20退货单 30返利单 40尾差调整单 -1 期初单
+		sdt,
+		source_bill_no,	-- 来源单号
+		source_bill_no_new,	-- 来源单号_新
+
+		customer_code,	-- 客户编码
+		credit_code,	-- 信控号
+		happen_date,	-- 发生时间
+		order_amt,	-- 源单据对账金额
+		company_code,	-- 签约公司编码
+		residue_amt,	-- 剩余预付款金额_预付款客户抵消订单金额后
+		residue_amt_sss,	-- 剩余预付款金额_原销售结算
+		unpaid_amount,	-- 未回款金额_抵消预付款后
+		unpaid_amount_sss,	-- 未回款金额_原销售结算
+		bad_debt_amount,	-- 坏账金额
+		account_period_code,	-- 账期编码
+		account_period_name,	-- 账期名称
+		account_period_value,	-- 账期值
+		source_sys,	-- 来源系统 MALL B端销售 BBC BBC端 BEGIN期初
+		close_bill_amount pay_amt,	-- 核销金额
+		reconciliation_period,  -- 对账周期
+		project_end_date,	-- 项目制结束日期
+		project_begin_date,	-- 项目制开始日期
+		bill_start_date,	-- 账期周期开始时间
+		bill_end_date,	-- 账期周期结束时间
+		-- date_add(date_format(bill_end_date, 'yyyy-MM-dd'), 1) bill_date, -- 结算日期
+		
+		-- 若不是项目制或者项目制且项目制结束日期距离业务发生日期小于等于31天，则常规结算日不变（账期周期结束时间+1）
+		--  否则看项目制结束日期距离发生日期大于31天：①日期部分业务发生日期≤项目制结束日期，则业务发生月+项目制结束日期的日期；②期部分业务发生日期大于项目制结束日期，则业务发生次月+项目制结束日期的日期
+   -- ******************************************************
+    -- 非项目制或日期差≤31天：bill_end_date + 1。
+    -- 项目制且日期差>31天：
+    -- 业务日 ≤ 项目结束日：
+    -- 若reconciliation_period=1 → 下个月1号。
+    -- 否则 → 安全构造日期（业务月 + 项目结束日），无效时返回下月1号。
+    -- 业务日 > 项目结束日 → 下个月1号 + (项目结束日 - 1)天。
+    -- *********************************************************
+	CASE WHEN COALESCE(project_end_date, '') = ''   OR (COALESCE(project_end_date, '') <> '' AND DATEDIFF(TO_DATE(project_end_date), TO_DATE(happen_date)) <= 31)
+        THEN DATE_ADD(TO_DATE(bill_end_date), 1)
+        WHEN COALESCE(project_end_date, '') <> '' AND DATEDIFF(TO_DATE(project_end_date), TO_DATE(happen_date)) > 31
+        THEN 
+            CASE 
+                WHEN DAY(TO_DATE(happen_date)) <= DAY(TO_DATE(project_end_date)) AND reconciliation_period = 1 
+                THEN TRUNC(ADD_MONTHS(TO_DATE(happen_date), 1), 'MM')
+                WHEN DAY(TO_DATE(happen_date)) <= DAY(TO_DATE(project_end_date))
+                THEN 
+                    -- 安全构造日期：业务发生月的年月 + 项目结束日期的日
+                    COALESCE(
+                        DATE_ADD(TO_DATE(CONCAT_WS('-',CAST(YEAR(TO_DATE(happen_date)) AS STRING),LPAD(CAST(MONTH(TO_DATE(happen_date)) AS STRING), 2, '0'),
+                                LPAD(CAST(DAY(TO_DATE(project_end_date)) AS STRING), 2, '0'))), 
+                            1
+                        ),
+                        -- 若构造的日期无效，则用下个月1号
+                        ADD_MONTHS(TRUNC(TO_DATE(happen_date), 'MM'), 1)
+                    )
+                    
+                ELSE 
+                    -- 业务发生日期 > 项目结束日期的日：下个月第一天 + (项目结束日 - 1)天
+                    DATE_ADD(
+                        TRUNC(ADD_MONTHS(TO_DATE(happen_date), 1), 'MM'),
+                        CAST(DAY(TO_DATE(project_end_date)) AS INT) - 1
+                    )
+            END
+        
+    ELSE 
+        DATE_ADD(TO_DATE(bill_end_date), 1)
+    END AS 		bill_date,
+	overdue_date	-- 逾期开始日期	  
+	from    tmp_bill_data
 )a
 join
 (
@@ -191,7 +265,7 @@ join
 	-- 用核销日期还是交易日期二选一
 	coalesce(b.trade_date,a.paid_date),
 	a.paid_date
-)b on b.close_bill_code=a.source_bill_no
+)b on b.close_bill_code=a.source_bill_no_new
 -- 核销月度快照表中202308后历史月快照中订单合计核销金额，被计算过的核销金额大于原单金额的，不再计算本月核销金额
 left join
 (
@@ -227,22 +301,7 @@ group by
 	a.bill_type,  -- 单据类型 10正常单 11福利单  20退货单 30返利单 40尾差调整单 -1 期初单
 	a.sdt,
 	a.source_bill_no,	-- 来源单号
-	CASE WHEN source_sys='BBC' AND substr(source_bill_no,1,1) = 'S' 
-          THEN regexp_replace(substr(source_bill_no,3), '^0+', '')
-        -- 原有逻辑：以B开头且结尾是(A-E)字母的情况
-        WHEN source_sys='BBC' AND substr(split(source_bill_no,'-')[0],1,1)='B' 
-             AND substr(split(source_bill_no,'-')[0],-1,1) IN ('A','B','C','D','E')
-          THEN substr(split(source_bill_no,'-')[0],2,length(split(source_bill_no,'-')[0])-2)
-        -- 原有逻辑：以B开头但结尾不是(A-E)字母的情况
-        WHEN source_sys='BBC' AND substr(split(source_bill_no,'-')[0],1,1)='B' 
-             AND substr(split(source_bill_no,'-')[0],-1,1) NOT IN ('A','B','C','D','E')
-          THEN substr(split(source_bill_no,'-')[0],2,length(split(source_bill_no,'-')[0])-1)
-        -- 原有逻辑：以R或S开头的情况
-        WHEN source_sys='BBC' AND substr(source_bill_no,1,1) IN ('R','S') 
-          THEN regexp_replace(source_bill_no,'^[A-Za-z]+|[A-Za-z]+$','')
-        -- 默认情况
-        ELSE split(source_bill_no,'-')[0]
-     END ,		
+	a.source_bill_no_new,	-- 新的来源单号 ,		
 	a.customer_code,	-- 客户编码
 	a.credit_code,	-- 信控号
 	a.happen_date,	-- 发生时间		

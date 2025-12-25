@@ -1,0 +1,7 @@
+通用市调商品行为数据表
+market_common_market_action_product   
+csx_dwd.csx_dwd_csx_price_prod_market_common_market_action_product_di
+
+
+select * from csx_dwd.csx_dwd_csx_price_prod_market_common_market_action_product_di
+where status=1

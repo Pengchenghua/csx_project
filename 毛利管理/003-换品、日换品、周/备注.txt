@@ -1,0 +1,11 @@
+实时订单换品：每天17点、21点推送各大区群；隔一段时间周报会做一次统计
+帆软：定时调度--换品v1
+csx_analyse_fr_order_change_goods_hf
+
+导入文件 List 目录
+
+-- 换品清单，csx_analyse_tmp.tmp_change_goods     
+
+-- 客服经理，csx_analyse_tmp.tmp_service_leader_name_list
+
+周菜单客户换品：属于是线下支持晓虹数据

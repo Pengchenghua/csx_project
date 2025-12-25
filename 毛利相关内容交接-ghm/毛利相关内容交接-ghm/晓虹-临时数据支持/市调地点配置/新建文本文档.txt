@@ -1,0 +1,1 @@
+表名：market_research_location_config

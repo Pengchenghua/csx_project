@@ -1,0 +1,6 @@
+-- 客户清单  csx_analyse_tmp.linkcustomer_target_rate
+	
+join 
+	(SELECT customer_code, target_rate,price_name,sale_base,target_profit 
+     FROM csx_analyse_tmp.linkcustomer_target_rate
+	) i on a.customer_code=i.customer_code	

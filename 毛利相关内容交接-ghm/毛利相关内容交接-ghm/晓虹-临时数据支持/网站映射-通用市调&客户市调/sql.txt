@@ -1,0 +1,28 @@
+-- 通用市调网站映射配置
+
+select * from csx_ods.csx_ods_csx_price_prod_market_common_web_ref_config_df
+where sdt ='20251022' and warehouse_code='W0A3' AND market_code='RW7' and status=1
+
+-- 客户市调映射配置
+select * from csx_ods.csx_ods_csx_price_prod_market_customer_web_ref_config_df
+where sdt='20251124' and status=1 and customer_code in (
+
+'252181'
+,'151497'
+,'252182'
+,'252189'
+,'254511'
+,'252183'
+,'254080'
+,'252191'
+,'258912'
+,'257481'
+,'252186'
+,'252193'
+,'252195'
+,'252185'
+,'256641'
+,'252999'
+
+
+)

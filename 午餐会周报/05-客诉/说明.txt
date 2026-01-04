@@ -1,0 +1,3 @@
+1、csx_analyse_tmp.complaint_code_list_use，按这个表的格式整理下上传到这个表里，是追加，不是覆盖
+2、csx_analyse_fr_complaint_month_report_mf，重新跑下这个任务；如果周跨月的情况，还需要重新跑下上月的数据！！！
+3、校验数据：帆软客诉周报是否出现周数据[图片][图片]

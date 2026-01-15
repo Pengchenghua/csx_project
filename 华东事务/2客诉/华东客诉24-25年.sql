@@ -20,6 +20,7 @@ from
 		and order_channel_code =1 -- 1-b端 2-m端 3-bbc 4-客户返利管理 5-价格补救 6-客户调价管理 -1-sap
 		and refund_order_flag=0 -- 退货订单标识(0-正向单 1-逆向单)
 		and performance_province_name !='平台-B'
+		and inventory_dc_code not in ('W0BD','W0T0','WC51')
 	) a 
 	left join
 		(
@@ -35,6 +36,8 @@ group by
 ;
 
 
+
+
 select
   a.*,
   b.ks_cnt,
@@ -46,6 +49,8 @@ from
       performance_region_name,
       performance_province_name,
       performance_city_name,
+      classify_large_name,
+      classify_middle_name,
       sum(sku_cnt) sku_cnt
     from
       csx_analyse_tmp.csx_analyse_tmp_oms_complaint_report_01
@@ -53,7 +58,9 @@ from
       smonth,
       performance_region_name,
       performance_province_name,
-      performance_city_name
+      performance_city_name,
+      classify_large_name,
+      classify_middle_name
   ) a
   left join (
     select
@@ -61,14 +68,35 @@ from
       region_name,
       province_name,
       city_name,
+      classify_large_name,
+      classify_middle_name ,
       count(distinct order_code) as ks_cnt 
 	  -- 手工导入临时表
-    from csx_analyse_tmp.csx_analyse_tmp_oms_complaint_pch
+    from csx_analyse_tmp.csx_analyse_tmp_oms_complaint_pch a 
+    join 
+    (select 
+         complaint_code,
+         classify_large_name,
+         classify_middle_name 
+        from
+             csx_analyse.csx_analyse_fr_oms_complaint_detail_new_di
+        where
+          inventory_dc_code not in ('W0BD','W0T0','WC51')
+          and sdt>='20240501'
+          group by complaint_code,
+         classify_large_name,
+         classify_middle_name 
+    ) b on a.order_code=b.complaint_code
     group by
       months,
       region_name,
       province_name,
-      city_name
+      city_name,
+      classify_large_name,
+      classify_middle_name 
   ) b on a.smonth = b.months
   and a.performance_city_name = b.city_name
   and a.performance_province_name = b.province_name
+  and a.classify_large_name=b.classify_large_name
+  and a.classify_middle_name=b.classify_middle_name
+  where performance_region_name='华东大区'

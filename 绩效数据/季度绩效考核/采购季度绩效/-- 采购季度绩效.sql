@@ -35,8 +35,8 @@ left join
 	  from csx_dim.csx_dim_shop
 	    where sdt='current' 
 	 ) c on a.inventory_dc_code=c.shop_code
-  where sdt >= '20250701'
-    and sdt <= '20250930'
+  where sdt >= '20251001'
+    and sdt <= '20251231'
     -- and channel_code in ('1','9')
     and ((business_type_code=1   and  extra='采购参与' ) or channel_code=2)
     and customer_code not in ('260128','262310','262306','262305','262311','262312','164512','119118','126157') 
@@ -180,6 +180,240 @@ group by sales_months,
     classify_middle_name,
     business_type_name
   ;
+
+-- 销售明细
+
+select substr(sdt,1,6) as sales_months,
+    basic_performance_region_name,
+	basic_performance_province_code,
+	basic_performance_province_name,
+	basic_performance_city_code,
+	basic_performance_city_name,
+	customer_code,
+	customer_name,
+    case when classify_large_code in ('B04','B05','B06','B07','B08','B09') then '食百'else classify_large_name end classify_large_name,
+    classify_middle_code,
+    classify_middle_name,
+    business_type_code,
+    business_type_name,
+    sum(sale_amt)sale_amt,
+    sum(profit) profit
+from csx_dws.csx_dws_sale_detail_di a
+left join 
+  (select
+      `code`,
+      name,
+      extra
+    from
+      csx_dim.csx_dim_basic_topic_dict_df
+    where
+      parent_code = 'direct_delivery_type') p on cast(a.direct_delivery_type as string) =  code
+left join 
+	(select basic_performance_region_name,
+	    basic_performance_province_code,
+	    basic_performance_province_name,
+	    basic_performance_city_code,
+	    basic_performance_city_name,
+	    shop_code
+	  from csx_dim.csx_dim_shop
+	    where sdt='current' 
+	 ) c on a.inventory_dc_code=c.shop_code
+  where sdt >= '20251001'
+    and sdt <= '20251231'
+    -- and channel_code in ('1','9')
+    and ((business_type_code=1   and  extra='采购参与' ) or channel_code=2)
+    and customer_code not in ('260128','262310','262306','262305','262311','262312','164512','119118','126157') 
+group by  case when classify_large_code in ('B04','B05','B06','B07','B08','B09') then '食百'else classify_large_name end ,
+        classify_middle_code,
+        classify_middle_name,
+        business_type_code,
+        business_type_name,
+        substr(sdt,1,6),
+        basic_performance_region_name,
+	    basic_performance_province_code,
+	    basic_performance_province_name,
+	    basic_performance_city_code,
+	    basic_performance_city_name,
+	    	customer_code,
+	customer_name
+
+;
+
+-- 返利明细
+SELECT
+  substr(regexp_replace(to_date(belong_date),'-',''),1,6) s_month,
+  a.basic_performance_region_name,
+  a.basic_performance_province_code,
+  a.basic_performance_province_name,
+  a.basic_performance_city_code,
+  a.basic_performance_city_name,
+  a.settlement_dc_code,
+  a.settlement_dc_name,
+  m.first_level_code firstLevelCode,
+  m.first_level_name firstLevelName,
+  m.second_level_code secondLevelCode,
+  m.second_level_name secondLevelName,
+  -- 分摊支出负数
+  sum(
+            CASE
+                WHEN a.is_share_fee = '1' AND a.income_type = '1' 
+                THEN -CAST(m.total_amount AS DECIMAL(26, 4))
+                ELSE CAST(m.total_amount AS DECIMAL(26, 4))
+            END
+        ) billTotalAmount 
+FROM
+    csx_dwd.csx_dwd_pss_settle_settle_bill_detail_management_classification_item_di m
+  inner JOIN (
+    select
+      belong_date,
+      settle_code,
+      settlement_dc_code,
+      shop_name as settlement_dc_name,
+      c.basic_performance_region_name,
+	  c.basic_performance_province_code,
+	  c.basic_performance_province_name,
+	  c.basic_performance_city_code,
+	  c.basic_performance_city_name,
+	  a.is_share_fee,
+	  a.income_type 
+    from
+      csx_dwd.csx_dwd_pss_settle_settle_bill_di a 
+   inner join 
+	(select basic_performance_region_name,
+	    basic_performance_province_code,
+	    basic_performance_province_name,
+	    basic_performance_city_code,
+	    basic_performance_city_name,
+	    shop_code,
+	    shop_name
+	  from csx_dim.csx_dim_shop
+	    where sdt='current' 
+	 ) c on a.settlement_dc_code=c.shop_code
+   where (settlement_dc_name not like '%项目供应商%'
+  and settlement_dc_name not like '%福利%'
+  and settlement_dc_name not like '%BBC%'
+  and settlement_dc_name not like '%全国%'
+  and settlement_dc_name not like '%合伙人%'
+  and settlement_dc_name not like '%服务商%'
+  and settlement_dc_name not like '%前置仓%'
+  and settlement_dc_name not like '%分仓%'
+  )
+  ) a ON a.settle_code = m.settle_no
+ where 
+   to_date(belong_date) >= '${sdate}'
+  and to_date(belong_date) <= '${edate}'
+ group by substr(regexp_replace(to_date(belong_date),'-',''),1,6) ,
+  a.basic_performance_region_name,
+  a.basic_performance_province_code,
+  a.basic_performance_province_name,
+  a.basic_performance_city_code,
+  a.basic_performance_city_name,
+  m.first_level_code ,
+  m.first_level_name ,
+  m.second_level_code ,
+  m.second_level_name  ,
+    a.settlement_dc_code,
+  a.settlement_dc_name
+; 
+
+-- 一次性出库缺货率
+select
+  substr(sdt,1,6) smt,
+  performance_region_name,
+  performance_province_code,
+  performance_province_name,
+  performance_city_code,
+  performance_city_name,
+--   a.inventory_dc_code,
+--   inventory_dc_name,
+--   business_division_name,
+  classify_large_code,
+  classify_large_name,
+  classify_middle_code,
+  classify_middle_name,
+  sum(if(is_out_of_stock = 1, 1, 0)) as stock_out_sku,
+  count(goods_code) all_sku
+from
+  csx_report.csx_report_oms_out_of_stock_goods_1d a
+where
+  sdt >= regexp_replace(trunc('${edate}','MM'),'-','') 
+    and sdt <=  regexp_replace('${edate}','-','') 
+     -- 剔除海军
+    and customer_code not in ('128363','128453','128512','128515','128520','128521','128524','128531','128560','128565','128363','128453',
+'128489','128496','128511','128520','128521','128533','128548','128559','128575','128489','128509','128511',
+'128512','128517','128520','128524','128559','128560','128573','128575','128362','128489','128496','128509',
+'128511','128517','128533','128534','128536','128548','128559','128573','128575','128362','128509','128512',
+'128515','128517','128524','128531','128534','128536','128560','128565','128573','128362','128363','128453',
+'128496','128515','128521','128531','128533','128534','128536','128548','128565','164512','119118','126157')
+  group by substr(sdt,1,6),
+  performance_region_name,
+  performance_province_code,
+  performance_province_name,
+  performance_city_code,
+  performance_city_name,
+--   a.inventory_dc_code,
+--   inventory_dc_name,
+--   business_division_name,
+  classify_large_code,
+  classify_large_name,
+  classify_middle_code,
+  classify_middle_name
+
+  ;
+    	
+-- 一次性缺货率明细
+-- 一次性出库缺货率
+select
+  substr(sdt,1,6) smt,
+  performance_region_name,
+  performance_province_code,
+  performance_province_name,
+  performance_city_code,
+  performance_city_name,
+  a.inventory_dc_code,
+  inventory_dc_name,
+  customer_code,
+  customer_name,
+  classify_large_code,
+  classify_large_name,
+  classify_middle_code,
+  classify_middle_name,
+  sum(if(is_out_of_stock = 1, 1, 0)) as stock_out_sku,
+  count(goods_code) all_sku
+from
+  csx_report.csx_report_oms_out_of_stock_goods_1d a
+where
+  sdt >=  '20251001'
+    and sdt <=  '20251231'
+     -- 剔除海军
+    and (customer_code not in ('128363','128453','128512','128515','128520','128521','128524','128531','128560','128565','128363','128453',
+'128489','128496','128511','128520','128521','128533','128548','128559','128575','128489','128509','128511',
+'128512','128517','128520','128524','128559','128560','128573','128575','128362','128489','128496','128509',
+'128511','128517','128533','128534','128536','128548','128559','128573','128575','128362','128509','128512',
+'128515','128517','128524','128531','128534','128536','128560','128565','128573','128362','128363','128453',
+'128496','128515','128521','128531','128533','128534','128536','128548','128565','164512','119118','126157')
+    and inventory_dc_code !='WC51'
+    )
+  group by substr(sdt,1,6),
+  performance_region_name,
+  performance_province_code,
+  performance_province_name,
+  performance_city_code,
+  performance_city_name,
+--   a.inventory_dc_code,
+--   inventory_dc_name,
+--   business_division_name,
+  classify_large_code,
+  classify_large_name,
+  classify_middle_code,
+  classify_middle_name,
+   a.inventory_dc_code,
+  inventory_dc_name,
+  customer_code,
+  customer_name
+
+  ;
+    	
 
 -- 销售需要核对仓归属问题,销售与费用需要分开取20250710
 

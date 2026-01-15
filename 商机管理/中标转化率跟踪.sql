@@ -140,7 +140,7 @@ select * from
     join csx_analyse_tmp.business_number b on a.business_number=b.business_number
   WHERE
     a.sdt = 'current'
-    and business_stage=5
+    -- and business_stage=5
     -- 增加审指状态，belong_approval_status = 2 已审批，belong_center_flow_id 或者无审批节点
     AND (belong_approval_status = 2 or belong_center_flow_id =-1)
 ),   

@@ -1,4 +1,5 @@
 -- 销售激励方案终版王树琴
+     -- 销售激励方案终版王树琴
       select
         
         substr(sdt, 1, 6) month,
@@ -11,10 +12,10 @@
          business_type_name,
         customer_code,
         customer_name,
-        sales_user_number,
-        sales_user_name,
+        rp_sales_number sales_user_number,
+        rp_sales_name as sales_user_name,
         rp_service_user_work_no,		
-	rp_service_user_name,
+	    rp_service_user_name,
         goods_code,
         goods_name,
         sum(sale_qty) sale_qty,
@@ -24,31 +25,58 @@
       from
          csx_dws.csx_dws_sale_detail_di a 
         left join 
-        (select customer_no,rp_service_user_work_no,		
-	rp_service_user_name
-	from  csx_analyse.csx_analyse_customer_sale_service_info_rate_qc_mi 
-	where smt='202510') b on a.customer_code=b.customer_no
+        (select customer_no,
+                rp_service_user_work_no,		
+	            rp_service_user_name,
+	            rp_sales_name,
+	            rp_sales_number
+	from   csx_analyse.csx_analyse_customer_sale_service_info_rate_qc_mi 
+	where smt='202512') b on a.customer_code=b.customer_no
       where
-        sdt >= '20251001'
-        and sdt <= '20251031'
+        sdt >= '20251201'
+        and sdt <= '20251231'
         -- and channel_code in ('1', '7', '9')
         and business_type_code in ('1') 
-        and goods_code in ('2059618',
-                            '2060343',
-                            '2074890',
-                            '2068674',
-                            '2070673',
-                            '2068674',
-                            '2070673',
-                            '1191891',
-                            '1527939',
-                            '2080079',
-                            '2083482',
-                            '2058632',
-                            '2058691',
-                            '2058467',
-                            '2058373'
-                            )--  and performance_region_name in ('华南大区', '华北大区', '华西大区', '华东大区', '华中大区')
+        and goods_code in ('2074890',
+'2068674',
+'2070673',
+'2080079',
+'2083482',
+'2112467',
+'2112527',
+'2045144',
+'2058691',
+'2058632',
+'2058373',
+'2058467',
+'2116981',
+'2116858',
+'2122504',
+'2122675',
+'2118941',
+'2118836',
+'2127073',
+'2127094',
+'2118961',
+'2118759',
+'2127101',
+'2126817',
+'2120182',
+'2118965',
+'2118982',
+'2120173',
+'1503631',
+'1503562',
+'1626847',
+'1542239',
+'1517554',
+'1542550',
+'2018065',
+'1823637',
+'1576853',
+'1554698',
+'1606821'
+        )--  and performance_region_name in ('华南大区', '华北大区', '华西大区', '华东大区', '华中大区')
       group by
         substr(sdt, 1, 6),
         performance_region_code,
@@ -59,12 +87,13 @@
         performance_city_name,
         customer_code,
         customer_name,
-        sales_user_number,
-        sales_user_name,
+        rp_sales_number,
+        rp_sales_name,
         goods_code,
         goods_name,
-        business_type_name,rp_service_user_work_no,		
-	rp_service_user_name
+        business_type_name,
+        rp_service_user_work_no,		
+    	rp_service_user_name
         ;
 
       select

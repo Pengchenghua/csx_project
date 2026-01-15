@@ -8,7 +8,7 @@
 5、管家评价表： csx_analyse.csx_analyse_fr_hr_customer_evaluation_detail_mf、 csx_ods.csx_ods_csx_b2b_study_fm_user_form_data_df a LEFT JOIN csx_ods.csx_ods_csx_b2b_study_questionnaire_paper_df
 6、日清日结：job_csx_analyse_report_order_control_oneday_settlement_df_ss_mf
 7、结果表：csx_analyse_fr_hr_red_black_service_manager_result_mf
-
+8、目标表： csx_analyse.csx_analyse_source_write_hr_service_red_black_target_mf 
 
 -- ******************************************************************** 
 -- @功能描述：销售红黑榜-服务管家信息表

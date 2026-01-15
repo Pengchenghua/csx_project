@@ -28,7 +28,7 @@ from   (
 				sum(profit_no_tax) excluding_tax_profit,
 				sum(sale_amt_no_tax) excluding_tax_sales
            from   csx_dws.csx_dws_sale_detail_di
-           where sdt >='20250701'  and sdt <= '20250930'
+           where sdt >='20251001'  and sdt <= '20251231'
 			 and (business_type_code in ('2','6','10') 
           or inventory_dc_code in ('WD75','WD76','WD77','WD78','WD79','WD80','WD81')) 
 		   group by customer_code,
@@ -41,7 +41,7 @@ LEFT join
           (
             select *
             from csx_dim.csx_dim_crm_customer_info
-            where sdt= '20250930'
+            where sdt= '20251231'
          --  and channel_code  in ('1','7','9')
           ) c on a.customer_code=c.customer_code 
 group by 
